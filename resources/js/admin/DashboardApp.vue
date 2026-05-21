@@ -255,7 +255,7 @@
                 <p v-if="settingsMessage" class="message">{{ settingsMessage }}</p>
             </section>
 
-            <section v-if="activeSection === 'stocks' || activeSection === 'sales'" class="content-grid">
+            <section v-if="activeSection === 'stocks' || (activeSection === 'sales' && currentUserCanSell)" class="content-grid">
                 <article v-if="activeSection === 'stocks'" class="card">
                     <div class="section-title">
                         <div>
@@ -294,7 +294,7 @@
                     <p v-if="message" class="message">{{ message }}</p>
                 </article>
 
-                <article v-if="activeSection === 'sales'" class="card">
+                <article v-if="activeSection === 'sales' && currentUserCanSell" class="card">
                     <div class="section-title">
                         <div>
                             <h2>Nouvelle vente</h2>
@@ -345,6 +345,12 @@
                                 <option value="credit">Crédit</option>
                             </select>
                         </label>
+                        <label>Type de document
+                            <select v-model="saleForm.type">
+                                <option value="invoice">Facture</option>
+                                <option value="proforma">Facture pro forma</option>
+                            </select>
+                        </label>
                         <label v-if="saleForm.payment_method === 'credit'">Échéance crédit
                             <input v-model="saleForm.credit_due_date" type="date" required>
                         </label>
@@ -359,6 +365,17 @@
 
                     <p v-if="saleMessage" class="message">{{ saleMessage }}</p>
                 </article>
+            </section>
+
+            <section v-if="activeSection === 'sales' && !currentUserCanSell" class="card activation-status-card">
+                <i class="fa-solid fa-user-tag"></i>
+                <div>
+                    <h2>Les ventes sont enregistrées par les vendeurs</h2>
+                    <p>
+                        L'admin suit les factures ici. Pour vendre, ajoutez un vendeur avec son nom, son téléphone et son mot de passe depuis
+                        <a class="highlight-link" :href="sectionUrl('personnel')">Personnel & paie</a>.
+                    </p>
+                </div>
             </section>
 
             <section v-if="activeSection === 'stocks'" class="card">
@@ -401,42 +418,171 @@
                 </div>
             </section>
 
+            <div v-if="activeSection === 'sales'" class="customer-view-switch">
+                <button :class="['customer-switch-card', salesView === 'invoices' ? 'active' : '']" type="button" @click="salesView = 'invoices'">
+                    <i class="fa-solid fa-receipt"></i>
+                    <span>Ventes</span>
+                    <strong>{{ formatMoney(filteredSalesTotal) }}</strong>
+                </button>
+                <button :class="['customer-switch-card', salesView === 'proformas' ? 'active' : '']" type="button" @click="salesView = 'proformas'">
+                    <i class="fa-solid fa-file-lines"></i>
+                    <span>Factures Pro forma</span>
+                    <strong>{{ filteredProformas.length }}</strong>
+                </button>
+            </div>
+
             <section v-if="activeSection === 'sales'" class="card">
                 <div class="section-title">
                     <div>
-                        <h2>Dernières factures</h2>
-                        <p>Chaque vente validée décrémente automatiquement le stock.</p>
+                        <h2>{{ salesView === 'proformas' ? 'Factures Pro forma' : 'Factures & ventes' }}</h2>
+                        <p>{{ salesView === 'proformas' ? 'Suivez les pro formas établies avant validation de vente.' : 'Suivez toutes les ventes effectuées par vos vendeurs.' }}</p>
                     </div>
+                    <div class="section-actions">
+                        <button class="btn btn-light" type="button" @click="showSalesPrintModal = true">
+                            <i class="fa-solid fa-print"></i>Imprimer
+                        </button>
+                    </div>
+                </div>
+
+                <div class="filters-grid">
+                    <label>Rechercher
+                        <input v-model="salesFilters.search" type="search" placeholder="Facture, vendeur, client">
+                    </label>
+                    <label v-if="salesView !== 'proformas'">Paiement
+                        <select v-model="salesFilters.payment">
+                            <option value="">Tous les paiements</option>
+                            <option value="cash">Espèces</option>
+                            <option value="mobile_money">Mobile Money</option>
+                            <option value="credit">Crédit</option>
+                        </select>
+                    </label>
+                    <div class="filter-control">
+                        <span>Trier par date</span>
+                        <button class="btn filter-date-btn" type="button" @click="openSalesDateFilter">
+                            <i class="fa-solid fa-calendar-days"></i>{{ salesDateFilterLabel }}
+                        </button>
+                    </div>
+                    <label>Trier par
+                        <select v-model="salesSort">
+                            <option value="date_desc">Date récente</option>
+                            <option value="date_asc">Date ancienne</option>
+                            <option value="total_desc">Total décroissant</option>
+                            <option value="total_asc">Total croissant</option>
+                            <option value="seller_asc">Vendeur A-Z</option>
+                            <option value="payment_asc">Paiement A-Z</option>
+                        </select>
+                    </label>
+                </div>
+
+                <div class="filtered-summary">
+                    <span>{{ salesView === 'proformas' ? proformasCountLabel : salesCountLabel }}</span>
+                    <strong>{{ formatMoney(salesView === 'proformas' ? filteredProformasTotal : filteredSalesTotal) }}</strong>
                 </div>
 
                 <div class="table-wrap">
                     <table>
                         <thead>
                             <tr>
-                                <th>Facture</th>
-                                <th>Paiement</th>
-                                <th>Statut</th>
-                                <th>Total</th>
                                 <th>Date</th>
                                 <th>Facture</th>
+                                <th>Vendeur</th>
+                                <th>Client</th>
+                                <th v-if="salesView !== 'proformas'">Paiement</th>
+                                <th v-if="salesView !== 'proformas'">Statut</th>
+                                <th>Total</th>
+                                <th>Action</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <tr v-for="sale in sales" :key="sale.id">
-                                <td><strong>{{ sale.number }}</strong><small>{{ sale.items.length }} ligne(s)</small></td>
-                                <td>{{ paymentLabel(sale.payment_method) }}</td>
-                                <td><span class="status ok">{{ sale.status }}</span></td>
-                                <td>{{ formatMoney(sale.total) }}</td>
+                            <tr v-for="sale in displayedSalesRows" :key="sale.id">
                                 <td>{{ formatDate(sale.sold_at) }}</td>
+                                <td><strong>{{ sale.number }}</strong><small>{{ sale.items.length }} ligne(s)</small></td>
+                                <td><strong>{{ sale.seller?.name || 'Vendeur' }}</strong><small>{{ sale.seller?.phone || '-' }}</small></td>
+                                <td>{{ sale.customer?.name || 'Client comptoir' }}</td>
+                                <td v-if="salesView !== 'proformas'">{{ paymentLabel(sale.payment_method) }}</td>
+                                <td v-if="salesView !== 'proformas'"><span class="status ok">{{ sale.status }}</span></td>
+                                <td>{{ formatMoney(sale.total) }}</td>
                                 <td><a class="table-icon" :href="`/businesses/${businessId}/sales/${sale.id}/invoice`" target="_blank" title="Voir la facture" aria-label="Voir la facture"><i class="fa-solid fa-file-invoice"></i></a></td>
                             </tr>
-                            <tr v-if="!sales.length">
-                                <td colspan="6" class="empty">Aucune vente enregistrée pour le moment.</td>
+                            <tr v-if="!displayedSalesRows.length">
+                                <td :colspan="salesView === 'proformas' ? 6 : 8" class="empty">{{ salesView === 'proformas' ? 'Aucune facture pro forma ne correspond aux filtres.' : 'Aucune vente ne correspond aux filtres.' }}</td>
                             </tr>
                         </tbody>
                     </table>
                 </div>
+                <div class="table-pagination">
+                    <span>{{ paginationLabel(displayedSalesRows.length) }}</span>
+                    <div>
+                        <button type="button" disabled>Précédent</button>
+                        <button type="button" disabled>Suivant</button>
+                    </div>
+                </div>
             </section>
+
+            <div v-if="showSalesDateModal" class="modal-backdrop" @click.self="showSalesDateModal = false">
+                <section class="choice-modal">
+                    <div class="section-title">
+                        <div>
+                            <h2>Trier par date</h2>
+                            <p>Choisissez une date de vente précise ou une période.</p>
+                        </div>
+                        <button class="table-icon" type="button" @click="showSalesDateModal = false" title="Fermer" aria-label="Fermer">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+                    <div class="segmented-actions">
+                        <button :class="['btn', salesDateMode === 'exact' ? 'btn-primary' : 'btn-light']" type="button" @click="salesDateMode = 'exact'">
+                            Date précise
+                        </button>
+                        <button :class="['btn', salesDateMode === 'range' ? 'btn-primary' : 'btn-light']" type="button" @click="salesDateMode = 'range'">
+                            Entre deux dates
+                        </button>
+                    </div>
+                    <div class="choice-form">
+                        <label v-if="salesDateMode === 'exact'">Date précise
+                            <input v-model="salesDateDraft.exactDate" type="date">
+                        </label>
+                        <template v-else>
+                            <label>Du
+                                <input v-model="salesDateDraft.startDate" type="date">
+                            </label>
+                            <label>Au
+                                <input v-model="salesDateDraft.endDate" type="date">
+                            </label>
+                        </template>
+                    </div>
+                    <div class="choice-actions">
+                        <button class="btn btn-light" type="button" @click="clearSalesDateFilter">
+                            <i class="fa-solid fa-eraser"></i>Effacer
+                        </button>
+                        <button class="btn btn-primary" type="button" @click="applySalesDateFilter">
+                            <i class="fa-solid fa-check"></i>Appliquer
+                        </button>
+                    </div>
+                </section>
+            </div>
+
+            <div v-if="showSalesPrintModal" class="modal-backdrop" @click.self="showSalesPrintModal = false">
+                <section class="choice-modal">
+                    <div class="section-title">
+                        <div>
+                            <h2>Imprimer</h2>
+                            <p>Choisissez le format d’impression des ventes affichées.</p>
+                        </div>
+                        <button class="table-icon" type="button" @click="showSalesPrintModal = false" title="Fermer" aria-label="Fermer">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+                    <div class="segmented-actions">
+                        <button class="btn btn-light" type="button" @click="chooseSalesPrint('pdf')">
+                            <i class="fa-solid fa-file-pdf"></i>PDF
+                        </button>
+                        <button class="btn btn-light" type="button" @click="chooseSalesPrint('excel')">
+                            <i class="fa-solid fa-file-excel"></i>Excel
+                        </button>
+                    </div>
+                </section>
+            </div>
 
             <div v-if="activeSection === 'customers'" class="customer-view-switch">
                 <button :class="['customer-switch-card', customerView === 'receivables' ? 'active' : '']" type="button" @click="customerView = 'receivables'">
@@ -538,11 +684,8 @@
                                         <button class="table-icon" type="button" :disabled="!receivable.remaining" @click="openReceivablePayment(receivable)" title="Ajouter un paiement" aria-label="Ajouter un paiement">
                                             <i class="fa-solid fa-money-bill"></i>
                                         </button>
-                                        <a v-if="receivable.customer?.phone" class="table-icon whatsapp" :href="receivableWhatsappUrl(receivable)" target="_blank" title="Relancer sur WhatsApp" aria-label="Relancer sur WhatsApp">
-                                            <i class="fa-brands fa-whatsapp"></i>
-                                        </a>
-                                        <button v-else class="table-icon" type="button" disabled title="Relance WhatsApp indisponible" aria-label="Relance WhatsApp indisponible">
-                                            <i class="fa-brands fa-whatsapp"></i>
+                                        <button class="table-icon" type="button" @click="openReceivableAmountEdit(receivable)" title="Modifier le montant" aria-label="Modifier le montant">
+                                            <i class="fa-solid fa-pen-to-square"></i>
                                         </button>
                                         <button class="table-icon danger-icon" type="button" @click="deleteReceivable(receivable)" title="Supprimer la dette" aria-label="Supprimer la dette">
                                             <i class="fa-solid fa-trash"></i>
@@ -713,9 +856,14 @@
                         <div>
                             <h2 class="large-modal-title">Situation créance</h2>
                         </div>
-                        <button class="table-icon" type="button" @click="closeReceivableDetails" title="Fermer" aria-label="Fermer">
-                            <i class="fa-solid fa-xmark"></i>
-                        </button>
+                        <div class="row-actions">
+                            <button class="table-icon" type="button" @click="showReceivableDetailsPrintModal = true" title="Imprimer" aria-label="Imprimer">
+                                <i class="fa-solid fa-print"></i>
+                            </button>
+                            <button class="table-icon" type="button" @click="closeReceivableDetails" title="Fermer" aria-label="Fermer">
+                                <i class="fa-solid fa-xmark"></i>
+                            </button>
+                        </div>
                     </div>
                     <div class="receivable-detail-grid">
                         <div><span>Client</span><strong>{{ selectedReceivableDetails?.customer?.name || 'Client' }}</strong></div>
@@ -734,10 +882,89 @@
                         <div v-for="payment in selectedReceivableDetails?.payments || []" :key="payment.id" class="payment-history-row">
                             <span>{{ formatDate(payment.paid_at) }}</span>
                             <b>{{ formatMoney(payment.amount) }}</b>
+                            <button class="table-icon payment-edit-icon" type="button" @click="openReceivablePaymentEdit(payment)" title="Modifier le paiement" aria-label="Modifier le paiement">
+                                <i class="fa-solid fa-pen-to-square"></i>
+                            </button>
                             <small>{{ paymentLabel(payment.method) }}{{ payment.reference ? ' - ' + payment.reference : '' }}</small>
                         </div>
                         <p v-if="!(selectedReceivableDetails?.payments || []).length" class="empty small-empty">Aucun paiement enregistré.</p>
                     </div>
+                </section>
+            </div>
+
+            <div v-if="showReceivableDetailsPrintModal" class="modal-backdrop" @click.self="showReceivableDetailsPrintModal = false">
+                <section class="choice-modal">
+                    <div class="section-title">
+                        <div>
+                            <h2>Imprimer</h2>
+                            <p>Choisissez le format d’impression de cette créance.</p>
+                        </div>
+                        <button class="table-icon" type="button" @click="showReceivableDetailsPrintModal = false" title="Fermer" aria-label="Fermer">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+                    <div class="segmented-actions">
+                        <button class="btn btn-light" type="button" @click="chooseReceivableDetailsPrint('pdf')">
+                            <i class="fa-solid fa-file-pdf"></i>PDF
+                        </button>
+                        <button class="btn btn-light" type="button" @click="chooseReceivableDetailsPrint('excel')">
+                            <i class="fa-solid fa-file-excel"></i>Excel
+                        </button>
+                    </div>
+                </section>
+            </div>
+
+            <div v-if="showReceivableAmountEditModal" class="modal-backdrop" @click.self="closeReceivableAmountEdit">
+                <section class="choice-modal">
+                    <div class="section-title">
+                        <div>
+                            <h2>Modifier la créance</h2>
+                            <p>{{ editingReceivable?.customer?.name || 'Client' }} - payé {{ formatMoney(editingReceivable?.amount_paid || 0) }}</p>
+                        </div>
+                        <button class="table-icon" type="button" @click="closeReceivableAmountEdit" title="Fermer" aria-label="Fermer">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+                    <form class="payment-modal-form" @submit.prevent="updateReceivableAmount">
+                        <label>Montant de la créance
+                            <input v-model.number="receivableAmountForm.amount_due" type="number" :min="editingReceivable?.amount_paid || 1" required>
+                        </label>
+                        <div class="choice-actions">
+                            <button class="btn btn-light" type="button" @click="closeReceivableAmountEdit">
+                                <i class="fa-solid fa-xmark"></i>Annuler
+                            </button>
+                            <button class="btn btn-primary" type="submit">
+                                <i class="fa-solid fa-check"></i>Enregistrer
+                            </button>
+                        </div>
+                    </form>
+                </section>
+            </div>
+
+            <div v-if="showReceivablePaymentEditModal" class="modal-backdrop" @click.self="closeReceivablePaymentEdit">
+                <section class="choice-modal">
+                    <div class="section-title">
+                        <div>
+                            <h2>Modifier le paiement</h2>
+                            <p>{{ selectedReceivableDetails?.customer?.name || 'Client' }}</p>
+                        </div>
+                        <button class="table-icon" type="button" @click="closeReceivablePaymentEdit" title="Fermer" aria-label="Fermer">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+                    <form class="payment-modal-form" @submit.prevent="updateReceivablePaymentAmount">
+                        <label>Montant du paiement
+                            <input v-model.number="receivablePaymentEditForm.amount" type="number" min="1" :max="maxEditableReceivablePaymentAmount" required>
+                        </label>
+                        <div class="choice-actions">
+                            <button class="btn btn-light" type="button" @click="closeReceivablePaymentEdit">
+                                <i class="fa-solid fa-xmark"></i>Annuler
+                            </button>
+                            <button class="btn btn-primary" type="submit">
+                                <i class="fa-solid fa-check"></i>Enregistrer
+                            </button>
+                        </div>
+                    </form>
                 </section>
             </div>
 
@@ -948,51 +1175,68 @@
                 </section>
             </div>
 
-            <section v-if="activeSection === 'suppliers'" class="content-grid">
-                <article class="card">
-                    <div class="section-title">
-                        <div>
-                            <h2>Ajouter une dette fournisseur</h2>
-                            <p>Enregistrez les montants dus et les échéances pour éviter les oublis.</p>
-                        </div>
-                    </div>
-
-                    <form class="supplier-form" @submit.prevent="saveSupplierDebt">
-                        <label>Fournisseur
-                            <input v-model="supplierDebtForm.supplier_name" type="text" required placeholder="Ex. Grossiste Cotonou">
-                        </label>
-                        <label>Téléphone
-                            <input v-model="supplierDebtForm.supplier_phone" type="tel" placeholder="Optionnel">
-                        </label>
-                        <label>Conditions
-                            <input v-model="supplierDebtForm.payment_terms" type="text" placeholder="Ex. paiement sous 15 jours">
-                        </label>
-                        <label>Montant dû
-                            <input v-model.number="supplierDebtForm.amount_due" type="number" required min="1">
-                        </label>
-                        <label>Échéance
-                            <input v-model="supplierDebtForm.due_date" type="date">
-                        </label>
-                        <button class="btn btn-primary" type="submit" :disabled="savingSupplierDebt">
-                            <i class="fa-solid fa-plus"></i>{{ savingSupplierDebt ? 'Enregistrement...' : 'Ajouter la dette' }}
-                        </button>
-                    </form>
-                    <p v-if="supplierDebtMessage" class="message">{{ supplierDebtMessage }}</p>
-                </article>
-
-                <article class="card payment-card">
+            <div v-if="activeSection === 'suppliers'" class="customer-view-switch">
+                <button :class="['customer-switch-card', supplierView === 'debts' ? 'active' : '']" type="button" @click="supplierView = 'debts'">
+                    <i class="fa-solid fa-file-invoice-dollar"></i>
+                    <span>Dettes</span>
+                    <strong>{{ formatMoney(filteredSupplierDebtsTotal) }}</strong>
+                </button>
+                <button :class="['customer-switch-card', supplierView === 'suppliers' ? 'active' : '']" type="button" @click="supplierView = 'suppliers'">
                     <i class="fa-solid fa-truck"></i>
-                    <h2>Suivi fournisseurs</h2>
-                    <p>Chaque dette fournisseur peut être remboursée en plusieurs paiements. Les statuts passent automatiquement à <strong>Payée</strong> ou <strong>En retard</strong> selon la situation.</p>
-                </article>
-            </section>
+                    <span>Fournisseurs</span>
+                    <strong>{{ supplierSummaries.length }}</strong>
+                </button>
+            </div>
 
-            <section v-if="activeSection === 'suppliers'" class="card">
+            <section v-if="activeSection === 'suppliers' && supplierView === 'debts'" class="card">
                 <div class="section-title">
                     <div>
-                        <h2>Fournisseurs & dettes</h2>
-                        <p>Suivez les commandes reçues, les montants dus et les paiements effectués.</p>
+                        <h2>Dettes fournisseurs</h2>
+                        <p>Filtrez, triez et exportez les montants dus aux fournisseurs.</p>
                     </div>
+                    <div class="section-actions">
+                        <button class="btn btn-primary" type="button" @click="openSupplierDebtCreateModal">
+                            <i class="fa-solid fa-plus"></i>Nouvelle dette
+                        </button>
+                        <button class="btn btn-light" type="button" @click="showSupplierDebtPrintModal = true">
+                            <i class="fa-solid fa-print"></i>Imprimer
+                        </button>
+                    </div>
+                </div>
+
+                <div class="filters-grid">
+                    <label>Rechercher
+                        <input v-model="supplierDebtFilters.search" type="search" placeholder="Fournisseur ou téléphone">
+                    </label>
+                    <label>Statut
+                        <select v-model="supplierDebtFilters.status">
+                            <option value="">Tous les statuts</option>
+                            <option value="current">En cours</option>
+                            <option value="overdue">En retard</option>
+                            <option value="paid">Payée</option>
+                        </select>
+                    </label>
+                    <div class="filter-control">
+                        <span>Trier par date</span>
+                        <button class="btn filter-date-btn" type="button" @click="openSupplierDebtDateFilter">
+                            <i class="fa-solid fa-calendar-days"></i>{{ supplierDebtDateFilterLabel }}
+                        </button>
+                    </div>
+                    <label>Trier par
+                        <select v-model="supplierDebtSort">
+                            <option value="due_date_asc">Échéance proche</option>
+                            <option value="due_date_desc">Échéance éloignée</option>
+                            <option value="remaining_desc">Reste décroissant</option>
+                            <option value="remaining_asc">Reste croissant</option>
+                            <option value="supplier_asc">Fournisseur A-Z</option>
+                            <option value="status_asc">Statut A-Z</option>
+                        </select>
+                    </label>
+                </div>
+
+                <div class="filtered-summary">
+                    <span>{{ supplierDebtsCountLabel }}</span>
+                    <strong>{{ formatMoney(filteredSupplierDebtsTotal) }}</strong>
                 </div>
 
                 <div class="table-wrap">
@@ -1009,7 +1253,7 @@
                             </tr>
                         </thead>
                         <tbody>
-                            <tr v-for="debt in supplierDebts" :key="debt.id">
+                            <tr v-for="debt in filteredSupplierDebts" :key="debt.id">
                                 <td><strong>{{ debt.supplier?.name || 'Fournisseur' }}</strong><small>{{ debt.supplier?.phone || 'Téléphone non renseigné' }}</small></td>
                                 <td>{{ formatMoney(debt.amount_due) }}</td>
                                 <td>{{ formatMoney(debt.amount_paid) }}</td>
@@ -1027,13 +1271,313 @@
                                     </form>
                                 </td>
                             </tr>
-                            <tr v-if="!supplierDebts.length">
-                                <td colspan="7" class="empty">Aucune dette fournisseur pour le moment.</td>
+                            <tr v-if="!filteredSupplierDebts.length">
+                                <td colspan="7" class="empty">Aucune dette fournisseur ne correspond aux filtres.</td>
                             </tr>
                         </tbody>
                     </table>
                 </div>
+                <div class="table-pagination">
+                    <span>{{ paginationLabel(filteredSupplierDebts.length) }}</span>
+                    <div>
+                        <button type="button" disabled>Précédent</button>
+                        <button type="button" disabled>Suivant</button>
+                    </div>
+                </div>
+                <p v-if="supplierDebtMessage" class="message">{{ supplierDebtMessage }}</p>
             </section>
+
+            <section v-if="activeSection === 'suppliers' && supplierView === 'suppliers'" class="card">
+                <div class="section-title">
+                    <div>
+                        <h2>Fournisseurs</h2>
+                        <p>Fiches fournisseurs et situation des comptes.</p>
+                    </div>
+                    <div class="section-actions">
+                        <button class="btn btn-primary" type="button" @click="openSupplierCreateModal">
+                            <i class="fa-solid fa-plus"></i>Nouveau fournisseur
+                        </button>
+                        <button class="btn btn-light" type="button" @click="showSupplierPrintModal = true">
+                            <i class="fa-solid fa-print"></i>Imprimer
+                        </button>
+                    </div>
+                </div>
+
+                <div class="filters-grid">
+                    <label>Rechercher
+                        <input v-model="supplierFilters.search" type="search" placeholder="Nom ou téléphone">
+                    </label>
+                    <label>Situation
+                        <select v-model="supplierFilters.situation">
+                            <option value="">Toutes les situations</option>
+                            <option value="debt">Dettes en cours</option>
+                            <option value="ok">Fournisseur OK</option>
+                        </select>
+                    </label>
+                    <label>Trier par
+                        <select v-model="supplierSort">
+                            <option value="name_asc">Fournisseur A-Z</option>
+                            <option value="debt_desc">Dettes décroissantes</option>
+                            <option value="orders_desc">Nombre de dettes</option>
+                        </select>
+                    </label>
+                </div>
+
+                <div class="filtered-summary">
+                    <span>{{ suppliersCountLabel }}</span>
+                    <strong>{{ formatMoney(filteredSuppliersDebtTotal) }}</strong>
+                </div>
+
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Fournisseur</th>
+                                <th>Téléphone</th>
+                                <th>Total dû</th>
+                                <th>Reste</th>
+                                <th>Situation</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="supplier in filteredSuppliers" :key="supplier.key">
+                                <td><strong>{{ supplier.name }}</strong></td>
+                                <td>{{ supplier.phone || '-' }}</td>
+                                <td>{{ formatMoney(supplier.totalDebt) }}</td>
+                                <td>{{ formatMoney(supplier.remainingDebt) }}</td>
+                                <td><span :class="['status', supplier.hasDebt ? 'danger' : 'ok']">{{ supplier.situation }}</span></td>
+                                <td>
+                                    <div class="row-actions">
+                                        <a v-if="supplier.phone" class="table-icon" :href="`tel:${supplier.phone}`" title="Appeler" aria-label="Appeler">
+                                            <i class="fa-solid fa-phone"></i>
+                                        </a>
+                                        <button v-else class="table-icon" type="button" disabled title="Téléphone indisponible" aria-label="Téléphone indisponible">
+                                            <i class="fa-solid fa-phone"></i>
+                                        </button>
+                                        <a v-if="supplier.phone" class="table-icon whatsapp" :href="supplierWhatsappUrl(supplier)" target="_blank" title="Contacter sur WhatsApp" aria-label="Contacter sur WhatsApp">
+                                            <i class="fa-brands fa-whatsapp"></i>
+                                        </a>
+                                        <button v-else class="table-icon" type="button" disabled title="WhatsApp indisponible" aria-label="WhatsApp indisponible">
+                                            <i class="fa-brands fa-whatsapp"></i>
+                                        </button>
+                                        <button class="table-icon" type="button" @click="openSupplierPhoneEdit(supplier)" title="Modifier le téléphone" aria-label="Modifier le téléphone">
+                                            <i class="fa-solid fa-pen-to-square"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr v-if="!filteredSuppliers.length">
+                                <td colspan="6" class="empty">Aucun fournisseur ne correspond aux filtres.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="table-pagination">
+                    <span>{{ paginationLabel(filteredSuppliers.length) }}</span>
+                    <div>
+                        <button type="button" disabled>Précédent</button>
+                        <button type="button" disabled>Suivant</button>
+                    </div>
+                </div>
+            </section>
+
+            <div v-if="showSupplierDebtCreateModal" class="modal-backdrop" @click.self="showSupplierDebtCreateModal = false">
+                <section class="choice-modal">
+                    <div class="section-title">
+                        <div>
+                            <h2>Nouvelle dette</h2>
+                            <p>Enregistrez le montant dû et son échéance.</p>
+                        </div>
+                        <button class="table-icon" type="button" @click="showSupplierDebtCreateModal = false" title="Fermer" aria-label="Fermer">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+
+                    <form class="payment-modal-form" @submit.prevent="saveSupplierDebt">
+                        <label>Fournisseur existant
+                            <select v-model="supplierDebtForm.supplier_id">
+                                <option value="">Nouveau fournisseur</option>
+                                <option v-for="supplier in suppliers" :key="supplier.id" :value="supplier.id">{{ supplier.name }} - {{ supplier.phone || 'sans téléphone' }}</option>
+                            </select>
+                        </label>
+                        <template v-if="!supplierDebtForm.supplier_id">
+                            <label>Nom du fournisseur
+                                <input v-model="supplierDebtForm.supplier_name" type="text" required placeholder="Nom complet">
+                            </label>
+                            <label>Téléphone
+                                <input v-model="supplierDebtForm.supplier_phone" type="tel" required placeholder="Ex. 019622860">
+                            </label>
+                            <label>Conditions
+                                <input v-model="supplierDebtForm.payment_terms" type="text" placeholder="Ex. paiement sous 15 jours">
+                            </label>
+                        </template>
+                        <label>Montant dû
+                            <input v-model.number="supplierDebtForm.amount_due" type="number" required min="1">
+                        </label>
+                        <label>Échéance
+                            <input v-model="supplierDebtForm.due_date" type="date">
+                        </label>
+                        <div class="choice-actions">
+                            <button class="btn btn-primary" type="button" @click="showSupplierDebtCreateModal = false">
+                                <i class="fa-solid fa-xmark"></i>Annuler
+                            </button>
+                            <button class="btn btn-light" type="submit" :disabled="savingSupplierDebt">
+                                <i class="fa-solid fa-check"></i>{{ savingSupplierDebt ? 'Enregistrement...' : 'Enregistrer' }}
+                            </button>
+                        </div>
+                    </form>
+                    <p v-if="supplierDebtMessage" class="message">{{ supplierDebtMessage }}</p>
+                </section>
+            </div>
+
+            <div v-if="showSupplierCreateModal" class="modal-backdrop" @click.self="showSupplierCreateModal = false">
+                <section class="choice-modal">
+                    <div class="section-title">
+                        <div>
+                            <h2>Nouveau fournisseur</h2>
+                            <p>Ajoutez une fiche fournisseur sans créer de dette.</p>
+                        </div>
+                        <button class="table-icon" type="button" @click="showSupplierCreateModal = false" title="Fermer" aria-label="Fermer">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+
+                    <form class="payment-modal-form" @submit.prevent="saveSupplier">
+                        <label>Nom
+                            <input v-model="supplierForm.name" type="text" required placeholder="Nom du fournisseur">
+                        </label>
+                        <label>Téléphone
+                            <input v-model="supplierForm.phone" type="tel" required placeholder="Ex. 019622860">
+                        </label>
+                        <div class="choice-actions">
+                            <button class="btn btn-light" type="button" @click="showSupplierCreateModal = false">
+                                <i class="fa-solid fa-xmark"></i>Annuler
+                            </button>
+                            <button class="btn btn-primary" type="submit" :disabled="savingSupplier">
+                                <i class="fa-solid fa-check"></i>{{ savingSupplier ? 'Enregistrement...' : 'Enregistrer' }}
+                            </button>
+                        </div>
+                    </form>
+                    <p v-if="supplierMessage" class="message">{{ supplierMessage }}</p>
+                </section>
+            </div>
+
+            <div v-if="showSupplierPhoneEditModal" class="modal-backdrop" @click.self="closeSupplierPhoneEdit">
+                <section class="choice-modal">
+                    <div class="section-title">
+                        <div>
+                            <h2>Modifier téléphone</h2>
+                            <p>{{ editingSupplier?.name || 'Fournisseur' }}</p>
+                        </div>
+                        <button class="table-icon" type="button" @click="closeSupplierPhoneEdit" title="Fermer" aria-label="Fermer">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+
+                    <form class="payment-modal-form" @submit.prevent="updateSupplierPhone">
+                        <label>Téléphone
+                            <input v-model="supplierPhoneForm.phone" type="tel" required placeholder="Ex. 019622860">
+                        </label>
+                        <div class="choice-actions">
+                            <button class="btn btn-light" type="button" @click="closeSupplierPhoneEdit">
+                                <i class="fa-solid fa-xmark"></i>Annuler
+                            </button>
+                            <button class="btn btn-primary" type="submit" :disabled="savingSupplier">
+                                <i class="fa-solid fa-check"></i>{{ savingSupplier ? 'Enregistrement...' : 'Enregistrer' }}
+                            </button>
+                        </div>
+                    </form>
+                    <p v-if="supplierMessage" class="message">{{ supplierMessage }}</p>
+                </section>
+            </div>
+
+            <div v-if="showSupplierDebtDateModal" class="modal-backdrop" @click.self="showSupplierDebtDateModal = false">
+                <section class="choice-modal">
+                    <div class="section-title">
+                        <div>
+                            <h2>Trier par date</h2>
+                            <p>Choisissez une date d’échéance précise ou une période.</p>
+                        </div>
+                        <button class="table-icon" type="button" @click="showSupplierDebtDateModal = false" title="Fermer" aria-label="Fermer">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+                    <div class="segmented-actions">
+                        <button :class="['btn', supplierDebtDateMode === 'exact' ? 'btn-primary' : 'btn-light']" type="button" @click="supplierDebtDateMode = 'exact'">
+                            Date précise
+                        </button>
+                        <button :class="['btn', supplierDebtDateMode === 'range' ? 'btn-primary' : 'btn-light']" type="button" @click="supplierDebtDateMode = 'range'">
+                            Entre deux dates
+                        </button>
+                    </div>
+                    <div class="choice-form">
+                        <label v-if="supplierDebtDateMode === 'exact'">Date précise
+                            <input v-model="supplierDebtDateDraft.exactDate" type="date">
+                        </label>
+                        <template v-else>
+                            <label>Du
+                                <input v-model="supplierDebtDateDraft.startDate" type="date">
+                            </label>
+                            <label>Au
+                                <input v-model="supplierDebtDateDraft.endDate" type="date">
+                            </label>
+                        </template>
+                    </div>
+                    <div class="choice-actions">
+                        <button class="btn btn-light" type="button" @click="clearSupplierDebtDateFilter">
+                            <i class="fa-solid fa-eraser"></i>Effacer
+                        </button>
+                        <button class="btn btn-primary" type="button" @click="applySupplierDebtDateFilter">
+                            <i class="fa-solid fa-check"></i>Appliquer
+                        </button>
+                    </div>
+                </section>
+            </div>
+
+            <div v-if="showSupplierDebtPrintModal" class="modal-backdrop" @click.self="showSupplierDebtPrintModal = false">
+                <section class="choice-modal">
+                    <div class="section-title">
+                        <div>
+                            <h2>Imprimer</h2>
+                            <p>Choisissez le format d’impression des dettes affichées.</p>
+                        </div>
+                        <button class="table-icon" type="button" @click="showSupplierDebtPrintModal = false" title="Fermer" aria-label="Fermer">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+                    <div class="segmented-actions">
+                        <button class="btn btn-light" type="button" @click="chooseSupplierDebtPrint('pdf')">
+                            <i class="fa-solid fa-file-pdf"></i>PDF
+                        </button>
+                        <button class="btn btn-light" type="button" @click="chooseSupplierDebtPrint('excel')">
+                            <i class="fa-solid fa-file-excel"></i>Excel
+                        </button>
+                    </div>
+                </section>
+            </div>
+
+            <div v-if="showSupplierPrintModal" class="modal-backdrop" @click.self="showSupplierPrintModal = false">
+                <section class="choice-modal">
+                    <div class="section-title">
+                        <div>
+                            <h2>Imprimer</h2>
+                            <p>Choisissez le format d’impression des fournisseurs affichés.</p>
+                        </div>
+                        <button class="table-icon" type="button" @click="showSupplierPrintModal = false" title="Fermer" aria-label="Fermer">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+                    <div class="segmented-actions">
+                        <button class="btn btn-light" type="button" @click="chooseSupplierPrint('pdf')">
+                            <i class="fa-solid fa-file-pdf"></i>PDF
+                        </button>
+                        <button class="btn btn-light" type="button" @click="chooseSupplierPrint('excel')">
+                            <i class="fa-solid fa-file-excel"></i>Excel
+                        </button>
+                    </div>
+                </section>
+            </div>
 
             <section v-if="activeSection === 'expenses'" class="card">
                 <div class="section-title">
@@ -1256,6 +1800,12 @@
                                 <option value="observer">Observateur</option>
                             </select>
                         </label>
+                        <label v-if="employeeForm.type === 'seller'">Téléphone de connexion
+                            <input v-model="employeeForm.phone" type="tel" required placeholder="Ex. 0196228860">
+                        </label>
+                        <label v-if="employeeForm.type === 'seller'">Mot de passe
+                            <input v-model="employeeForm.password" type="password" required minlength="8" placeholder="8 caractères minimum">
+                        </label>
                         <label>Salaire mensuel
                             <input v-model.number="employeeForm.salary" type="number" required min="0">
                         </label>
@@ -1331,7 +1881,7 @@
                         </thead>
                         <tbody>
                             <tr v-for="employee in employees" :key="employee.id">
-                                <td><strong>{{ employee.name }}</strong></td>
+                                <td><strong>{{ employee.name }}</strong><small v-if="employee.user?.phone">Connexion: {{ employee.user.phone }}</small></td>
                                 <td>{{ employee.position }}</td>
                                 <td><span class="status ok">{{ employeeTypeLabel(employee.type) }}</span></td>
                                 <td>{{ formatMoney(employee.salary) }}</td>
@@ -1452,6 +2002,7 @@ const products = ref([]);
 const sales = ref([]);
 const customers = ref([]);
 const receivables = ref([]);
+const suppliers = ref([]);
 const supplierDebts = ref([]);
 const expenses = ref([]);
 const employees = ref([]);
@@ -1477,12 +2028,16 @@ const message = ref('');
 const saleMessage = ref('');
 const receivableMessage = ref('');
 const supplierDebtMessage = ref('');
+const supplierMessage = ref('');
 const savingSupplierDebt = ref(false);
+const savingSupplier = ref(false);
 const expenseMessage = ref('');
 const savingExpense = ref(false);
 const showExpenseModal = ref(false);
 const showExpenseDateModal = ref(false);
 const showExpensePrintModal = ref(false);
+const showSalesDateModal = ref(false);
+const showSalesPrintModal = ref(false);
 const showExpenseFilterCategoryMenu = ref(false);
 const showExpenseFormCategoryMenu = ref(false);
 const expenseDateMode = ref('exact');
@@ -1491,14 +2046,28 @@ const showReceivablePrintModal = ref(false);
 const showReceivablePaymentModal = ref(false);
 const showReceivableDetailsModal = ref(false);
 const showReceivableCreateModal = ref(false);
+const showReceivableAmountEditModal = ref(false);
+const showReceivablePaymentEditModal = ref(false);
+const showReceivableDetailsPrintModal = ref(false);
+const showSupplierDebtDateModal = ref(false);
+const showSupplierDebtPrintModal = ref(false);
+const showSupplierPrintModal = ref(false);
+const showSupplierDebtCreateModal = ref(false);
+const showSupplierCreateModal = ref(false);
+const showSupplierPhoneEditModal = ref(false);
 const showCustomerCreateModal = ref(false);
 const showCustomerPrintModal = ref(false);
 const showCustomerDetailsModal = ref(false);
 const receivableDateMode = ref('exact');
 const selectedReceivable = ref(null);
 const selectedReceivableDetails = ref(null);
+const editingReceivable = ref(null);
+const editingReceivablePayment = ref(null);
 const selectedCustomerDetails = ref(null);
+const editingSupplier = ref(null);
 const customerView = ref('receivables');
+const supplierView = ref('debts');
+const salesView = ref('invoices');
 const savingReceivable = ref(false);
 const savingCustomer = ref(false);
 const employeeMessage = ref('');
@@ -1531,7 +2100,7 @@ const pageMeta = {
     dashboard: ['Tableau de bord', 'Vos statistiques essentielles.'],
     notifications: ['Notifications', 'Alertes, validations et messages importants.'],
     stocks: ['Stocks', "Produits, inventaire et seuils d'alerte."],
-    sales: ['Factures & ventes', 'Caisse, panier et dernières factures.'],
+    sales: ['Factures & ventes', 'Suivi des ventes, factures et factures pro forma'],
     customers: ['Clients & créances', 'Crédits clients, échéances et remboursements.'],
     suppliers: ['Fournisseurs & dettes', 'Dettes fournisseurs, échéances et paiements.'],
     expenses: ['Charges', 'Dépenses classées par catégories OHADA.'],
@@ -1542,6 +2111,7 @@ const pageMeta = {
 };
 const pageTitle = computed(() => pageMeta[activeSection.value]?.[0] || 'Tableau de bord');
 const pageSubtitle = computed(() => pageMeta[activeSection.value]?.[1] || 'Vos statistiques essentielles.');
+const currentUserCanSell = computed(() => currentUser.value?.role === 'Vendeur');
 
 function sectionUrl(section) {
     return `/dashboard/${props.businessId}/${section}`;
@@ -1587,10 +2157,26 @@ const saleForm = reactive({
     customer_name: '',
     customer_phone: '',
     payment_method: 'cash',
+    type: 'invoice',
     credit_due_date: '',
 });
 
 const cart = ref([]);
+
+const salesFilters = reactive({
+    search: '',
+    payment: '',
+    exactDate: '',
+    startDate: '',
+    endDate: '',
+});
+const salesDateDraft = reactive({
+    exactDate: '',
+    startDate: '',
+    endDate: '',
+});
+const salesDateMode = ref('exact');
+const salesSort = ref('date_desc');
 
 const customerForm = reactive({
     name: '',
@@ -1606,13 +2192,52 @@ const receivableForm = reactive({
     notes: '',
 });
 
+const receivableAmountForm = reactive({
+    amount_due: '',
+});
+
+const receivablePaymentEditForm = reactive({
+    amount: '',
+});
+
 const supplierDebtForm = reactive({
+    supplier_id: '',
     supplier_name: '',
     supplier_phone: '',
     payment_terms: '',
     amount_due: '',
     due_date: '',
 });
+
+const supplierForm = reactive({
+    name: '',
+    phone: '',
+    payment_terms: '',
+});
+
+const supplierPhoneForm = reactive({
+    phone: '',
+});
+
+const supplierDebtFilters = reactive({
+    search: '',
+    status: '',
+    exactDate: '',
+    startDate: '',
+    endDate: '',
+});
+const supplierDebtDateDraft = reactive({
+    exactDate: '',
+    startDate: '',
+    endDate: '',
+});
+const supplierDebtDateMode = ref('exact');
+const supplierDebtSort = ref('due_date_asc');
+const supplierFilters = reactive({
+    search: '',
+    situation: '',
+});
+const supplierSort = ref('name_asc');
 
 const expenseForm = reactive({
     name: '',
@@ -1698,6 +2323,8 @@ const customerSort = ref('name_asc');
 
 const employeeForm = reactive({
     name: '',
+    phone: '',
+    password: '',
     position: '',
     type: 'seller',
     salary: '',
@@ -1738,6 +2365,96 @@ const availableProducts = computed(() => products.value.filter((product) => Numb
 
 const cartTotal = computed(() => cart.value.reduce((total, item) => total + item.total, 0));
 const unreadNotifications = computed(() => notifications.value.filter((item) => !item.read_at).length);
+const filteredSales = computed(() => {
+    const term = salesFilters.search.trim().toLowerCase();
+    const rows = sales.value.filter((sale) => {
+        if ((sale.type || 'invoice') !== 'invoice') {
+            return false;
+        }
+
+        const soldDate = String(sale.sold_at || '').slice(0, 10);
+        const matchesSearch = !term
+            || [
+                sale.number,
+                sale.seller?.name,
+                sale.seller?.phone,
+                sale.customer?.name,
+                sale.customer?.phone,
+            ].some((value) => String(value || '').toLowerCase().includes(term));
+        const matchesPayment = !salesFilters.payment || sale.payment_method === salesFilters.payment;
+        const matchesExactDate = !salesFilters.exactDate || soldDate === salesFilters.exactDate;
+        const matchesStartDate = !salesFilters.startDate || (soldDate && soldDate >= salesFilters.startDate);
+        const matchesEndDate = !salesFilters.endDate || (soldDate && soldDate <= salesFilters.endDate);
+
+        return matchesSearch && matchesPayment && matchesExactDate && matchesStartDate && matchesEndDate;
+    });
+
+    return [...rows].sort((a, b) => {
+        const aDate = String(a.sold_at || '');
+        const bDate = String(b.sold_at || '');
+        if (salesSort.value === 'date_asc') return aDate.localeCompare(bDate);
+        if (salesSort.value === 'total_desc') return Number(b.total) - Number(a.total);
+        if (salesSort.value === 'total_asc') return Number(a.total) - Number(b.total);
+        if (salesSort.value === 'seller_asc') return String(a.seller?.name || '').localeCompare(String(b.seller?.name || ''), 'fr');
+        if (salesSort.value === 'payment_asc') return paymentLabel(a.payment_method).localeCompare(paymentLabel(b.payment_method), 'fr');
+        return bDate.localeCompare(aDate);
+    });
+});
+const filteredSalesTotal = computed(() => filteredSales.value.reduce((sum, sale) => sum + Number(sale.total || 0), 0));
+const salesCountLabel = computed(() => {
+    const count = filteredSales.value.length;
+    return `${count} vente${count >= 2 ? 's' : ''} affichée${count >= 2 ? 's' : ''}`;
+});
+const filteredProformas = computed(() => {
+    const term = salesFilters.search.trim().toLowerCase();
+    const rows = sales.value.filter((sale) => {
+        if (sale.type !== 'proforma') {
+            return false;
+        }
+
+        const soldDate = String(sale.sold_at || '').slice(0, 10);
+        const matchesSearch = !term
+            || [
+                sale.number,
+                sale.seller?.name,
+                sale.seller?.phone,
+                sale.customer?.name,
+                sale.customer?.phone,
+            ].some((value) => String(value || '').toLowerCase().includes(term));
+        const matchesExactDate = !salesFilters.exactDate || soldDate === salesFilters.exactDate;
+        const matchesStartDate = !salesFilters.startDate || (soldDate && soldDate >= salesFilters.startDate);
+        const matchesEndDate = !salesFilters.endDate || (soldDate && soldDate <= salesFilters.endDate);
+
+        return matchesSearch && matchesExactDate && matchesStartDate && matchesEndDate;
+    });
+
+    return [...rows].sort((a, b) => {
+        const aDate = String(a.sold_at || '');
+        const bDate = String(b.sold_at || '');
+        if (salesSort.value === 'date_asc') return aDate.localeCompare(bDate);
+        if (salesSort.value === 'total_desc') return Number(b.total) - Number(a.total);
+        if (salesSort.value === 'total_asc') return Number(a.total) - Number(b.total);
+        if (salesSort.value === 'seller_asc') return String(a.seller?.name || '').localeCompare(String(b.seller?.name || ''), 'fr');
+        return bDate.localeCompare(aDate);
+    });
+});
+const filteredProformasTotal = computed(() => filteredProformas.value.reduce((sum, sale) => sum + Number(sale.total || 0), 0));
+const proformasCountLabel = computed(() => {
+    const count = filteredProformas.value.length;
+    return `${count} pro forma affichée${count >= 2 ? 's' : ''}`;
+});
+const displayedSalesRows = computed(() => salesView.value === 'proformas' ? filteredProformas.value : filteredSales.value);
+const salesDateFilterLabel = computed(() => {
+    if (salesFilters.exactDate) {
+        return salesFilters.exactDate;
+    }
+
+    if (salesFilters.startDate || salesFilters.endDate) {
+        return `${salesFilters.startDate || 'Début'} - ${salesFilters.endDate || 'Fin'}`;
+    }
+
+    return 'Choisir';
+});
 const filteredExpenses = computed(() => {
     const term = expenseFilters.search.trim().toLowerCase();
     const rows = expenses.value.filter((expense) => {
@@ -1807,6 +2524,17 @@ const receivablesCountLabel = computed(() => {
     const count = filteredReceivables.value.length;
     return `${count} créance${count >= 2 ? 's' : ''} affichée${count >= 2 ? 's' : ''}`;
 });
+const maxEditableReceivablePaymentAmount = computed(() => {
+    if (!selectedReceivableDetails.value || !editingReceivablePayment.value) {
+        return 1;
+    }
+
+    const otherPaymentsTotal = (selectedReceivableDetails.value.payments || [])
+        .filter((payment) => payment.id !== editingReceivablePayment.value.id)
+        .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+
+    return Math.max(1, Number(selectedReceivableDetails.value.amount_due || 0) - otherPaymentsTotal);
+});
 const receivableDateFilterLabel = computed(() => {
     if (receivableFilters.exactDate) {
         return receivableFilters.exactDate;
@@ -1817,6 +2545,119 @@ const receivableDateFilterLabel = computed(() => {
     }
 
     return 'Choisir';
+});
+const filteredSupplierDebts = computed(() => {
+    const term = supplierDebtFilters.search.trim().toLowerCase();
+    const rows = supplierDebts.value.filter((debt) => {
+        const supplier = debt.supplier || {};
+        const matchesSearch = !term
+            || [supplier.name, supplier.phone].some((value) => String(value || '').toLowerCase().includes(term));
+        const matchesStatus = !supplierDebtFilters.status || debt.status === supplierDebtFilters.status;
+        const dueDate = debt.due_date || '';
+        const matchesExactDate = !supplierDebtFilters.exactDate || dueDate === supplierDebtFilters.exactDate;
+        const matchesStartDate = !supplierDebtFilters.startDate || (dueDate && dueDate >= supplierDebtFilters.startDate);
+        const matchesEndDate = !supplierDebtFilters.endDate || (dueDate && dueDate <= supplierDebtFilters.endDate);
+
+        return matchesSearch && matchesStatus && matchesExactDate && matchesStartDate && matchesEndDate;
+    });
+
+    return [...rows].sort((a, b) => {
+        const aDueDate = a.due_date || '9999-12-31';
+        const bDueDate = b.due_date || '9999-12-31';
+
+        if (supplierDebtSort.value === 'due_date_desc') return bDueDate.localeCompare(aDueDate);
+        if (supplierDebtSort.value === 'remaining_desc') return Number(b.remaining) - Number(a.remaining);
+        if (supplierDebtSort.value === 'remaining_asc') return Number(a.remaining) - Number(b.remaining);
+        if (supplierDebtSort.value === 'supplier_asc') return String(a.supplier?.name || '').localeCompare(String(b.supplier?.name || ''), 'fr');
+        if (supplierDebtSort.value === 'status_asc') return receivableStatusLabel(a.status).localeCompare(receivableStatusLabel(b.status), 'fr');
+        return aDueDate.localeCompare(bDueDate);
+    });
+});
+const filteredSupplierDebtsTotal = computed(() => filteredSupplierDebts.value.reduce((sum, debt) => sum + Number(debt.remaining || 0), 0));
+const supplierDebtsCountLabel = computed(() => {
+    const count = filteredSupplierDebts.value.length;
+    return `${count} dette${count >= 2 ? 's' : ''} affichée${count >= 2 ? 's' : ''}`;
+});
+const supplierDebtDateFilterLabel = computed(() => {
+    if (supplierDebtFilters.exactDate) {
+        return supplierDebtFilters.exactDate;
+    }
+
+    if (supplierDebtFilters.startDate || supplierDebtFilters.endDate) {
+        return `${supplierDebtFilters.startDate || 'Début'} - ${supplierDebtFilters.endDate || 'Fin'}`;
+    }
+
+    return 'Choisir';
+});
+const supplierSummaries = computed(() => {
+    const rows = new Map();
+
+    suppliers.value.forEach((supplier) => {
+        rows.set(`supplier-${supplier.id}`, {
+            key: `supplier-${supplier.id}`,
+            id: supplier.id,
+            name: supplier.name || 'Fournisseur',
+            phone: supplier.phone || '',
+            payment_terms: supplier.payment_terms || '',
+            totalDebt: 0,
+            remainingDebt: 0,
+            hasDebt: false,
+            debts: [],
+        });
+    });
+
+    supplierDebts.value.forEach((debt) => {
+        const supplier = debt.supplier || {};
+        const key = supplier.id ? `supplier-${supplier.id}` : `anonymous-${supplier.name || debt.id}`;
+        if (!rows.has(key)) {
+            rows.set(key, {
+                key,
+                id: supplier.id || null,
+                name: supplier.name || 'Fournisseur',
+                phone: supplier.phone || '',
+                payment_terms: supplier.payment_terms || '',
+                totalDebt: 0,
+                remainingDebt: 0,
+                hasDebt: false,
+                debts: [],
+            });
+        }
+
+        const row = rows.get(key);
+        const remaining = Number(debt.remaining || 0);
+        row.totalDebt += Number(debt.amount_due || 0);
+        row.remainingDebt += remaining;
+        row.hasDebt = row.hasDebt || remaining > 0;
+        row.debts.push(debt);
+    });
+
+    return Array.from(rows.values()).map((supplier) => ({
+        ...supplier,
+        situation: supplier.hasDebt ? 'Dettes en cours' : 'Fournisseur OK',
+    }));
+});
+const filteredSuppliers = computed(() => {
+    const term = supplierFilters.search.trim().toLowerCase();
+    const rows = supplierSummaries.value.filter((supplier) => {
+        const matchesSearch = !term
+            || [supplier.name, supplier.phone, supplier.payment_terms].some((value) => String(value || '').toLowerCase().includes(term));
+        const matchesSituation = !supplierFilters.situation
+            || (supplierFilters.situation === 'debt' && supplier.hasDebt)
+            || (supplierFilters.situation === 'ok' && !supplier.hasDebt);
+
+        return matchesSearch && matchesSituation;
+    });
+
+    return [...rows].sort((a, b) => {
+        if (supplierSort.value === 'debt_desc') return Number(b.remainingDebt) - Number(a.remainingDebt);
+        if (supplierSort.value === 'orders_desc') return Number(b.debts.length) - Number(a.debts.length);
+        return String(a.name || '').localeCompare(String(b.name || ''), 'fr');
+    });
+});
+const filteredSuppliersDebtTotal = computed(() => filteredSuppliers.value.reduce((sum, supplier) => sum + Number(supplier.remainingDebt || 0), 0));
+const suppliersCountLabel = computed(() => {
+    const count = filteredSuppliers.value.length;
+    return `${count} fournisseur${count >= 2 ? 's' : ''} affiché${count >= 2 ? 's' : ''}`;
 });
 const customerSummaries = computed(() => {
     const customerRows = new Map();
@@ -1998,7 +2839,7 @@ async function enhanceTables() {
     });
 }
 
-watch([activeSection, customerView, filteredExpenses, filteredReceivables, filteredCustomers], () => {
+watch([activeSection, customerView, supplierView, salesView, filteredSales, filteredProformas, filteredExpenses, filteredReceivables, filteredCustomers, filteredSupplierDebts, filteredSuppliers], () => {
     enhanceTables();
 }, { flush: 'post' });
 
@@ -2054,6 +2895,13 @@ function receivableWhatsappUrl(receivable) {
 function customerWhatsappUrl(customer) {
     const phone = normalizeWhatsappPhone(customer?.phone);
     const message = `Bonjour ${customer?.name || 'cher client'}, nous vous contactons depuis EasyMarket.`;
+
+    return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+}
+
+function supplierWhatsappUrl(supplier) {
+    const phone = normalizeWhatsappPhone(supplier?.phone);
+    const message = `Bonjour ${supplier?.name || 'cher fournisseur'}, nous vous contactons depuis EasyMarket.`;
 
     return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
 }
@@ -2249,6 +3097,7 @@ async function loadDashboard() {
     products.value = data.products;
     sales.value = data.sales;
     customers.value = data.customers || [];
+    suppliers.value = data.suppliers || [];
     receivables.value = data.receivables.map((receivable) => ({
         ...receivable,
         payment_amount: receivable.remaining || '',
@@ -2414,6 +3263,7 @@ async function saveSale() {
     saleMessage.value = '';
 
     try {
+        const documentType = saleForm.type;
         const response = await fetch(`/api/businesses/${props.businessId}/sales`, {
             method: 'POST',
             headers: requestHeaders({ 'Content-Type': 'application/json' }),
@@ -2437,9 +3287,10 @@ async function saveSale() {
             customer_name: '',
             customer_phone: '',
             payment_method: 'cash',
+            type: 'invoice',
             credit_due_date: '',
         });
-        saleMessage.value = 'Facture enregistrée avec succès.';
+        saleMessage.value = documentType === 'proforma' ? 'Facture pro forma enregistrée avec succès.' : 'Facture enregistrée avec succès.';
         notifySuccess(saleMessage.value);
         await loadDashboard();
     } catch (error) {
@@ -2448,6 +3299,114 @@ async function saveSale() {
     } finally {
         savingSale.value = false;
     }
+}
+
+function openSalesDateFilter() {
+    salesDateMode.value = salesFilters.startDate || salesFilters.endDate ? 'range' : 'exact';
+    Object.assign(salesDateDraft, {
+        exactDate: salesFilters.exactDate,
+        startDate: salesFilters.startDate,
+        endDate: salesFilters.endDate,
+    });
+    showSalesDateModal.value = true;
+}
+
+function applySalesDateFilter() {
+    if (salesDateMode.value === 'exact') {
+        salesFilters.exactDate = salesDateDraft.exactDate;
+        salesFilters.startDate = '';
+        salesFilters.endDate = '';
+    } else {
+        salesFilters.exactDate = '';
+        salesFilters.startDate = salesDateDraft.startDate;
+        salesFilters.endDate = salesDateDraft.endDate;
+    }
+
+    showSalesDateModal.value = false;
+}
+
+function clearSalesDateFilter() {
+    Object.assign(salesFilters, {
+        exactDate: '',
+        startDate: '',
+        endDate: '',
+    });
+    Object.assign(salesDateDraft, {
+        exactDate: '',
+        startDate: '',
+        endDate: '',
+    });
+    showSalesDateModal.value = false;
+}
+
+function chooseSalesPrint(format) {
+    showSalesPrintModal.value = false;
+    if (format === 'excel') {
+        exportFilteredSalesExcel();
+        return;
+    }
+
+    printFilteredSales();
+}
+
+function salesRowsForExport() {
+    return displayedSalesRows.value.map((sale) => ({
+        number: sale.number || '',
+        seller: sale.seller?.name || 'Vendeur',
+        client: sale.customer?.name || 'Client comptoir',
+        payment: paymentLabel(sale.payment_method),
+        status: sale.status || '',
+        total: Number(sale.total || 0),
+        date: formatDate(sale.sold_at),
+        lines: sale.items?.length || 0,
+    }));
+}
+
+function exportFilteredSalesExcel() {
+    const rows = salesRowsForExport();
+    const bodyRows = rows.length
+        ? rows.map((row) => `<tr><td>${printEscapeHtml(row.number)}</td><td>${printEscapeHtml(row.seller)}</td><td>${printEscapeHtml(row.client)}</td><td>${printEscapeHtml(row.payment)}</td><td>${printEscapeHtml(row.status)}</td><td>${row.total}</td><td>${printEscapeHtml(row.date)}</td><td>${row.lines}</td></tr>`).join('')
+        : '<tr><td colspan="8">Aucune vente affichée.</td></tr>';
+    const html = `
+        <table>
+            <thead><tr><th>Facture</th><th>Vendeur</th><th>Client</th><th>Paiement</th><th>Statut</th><th>Total</th><th>Date</th><th>Lignes</th></tr></thead>
+            <tbody>${bodyRows}</tbody>
+            <tfoot><tr><td colspan="5">Total</td><td>${salesView.value === 'proformas' ? filteredProformasTotal.value : filteredSalesTotal.value}</td><td colspan="2"></td></tr></tfoot>
+        </table>
+    `;
+    const blob = new Blob([`\uFEFF${html}`], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `${salesView.value === 'proformas' ? 'factures-pro-forma' : 'ventes'}-${new Date().toISOString().slice(0, 10)}.xls`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+    notifySuccess('Export Excel généré.');
+}
+
+function printFilteredSales() {
+    const rows = salesRowsForExport();
+    const printableRows = rows.length
+        ? rows.map((row) => `<tr><td>${printEscapeHtml(row.number)}</td><td>${printEscapeHtml(row.seller)}</td><td>${printEscapeHtml(row.client)}</td><td>${printEscapeHtml(row.payment)}</td><td>${printEscapeHtml(row.status)}</td><td>${formatMoney(row.total)}</td><td>${printEscapeHtml(row.date)}</td><td>${row.lines}</td></tr>`).join('')
+        : '<tr><td colspan="8">Aucune vente affichée.</td></tr>';
+    const printWindow = window.open('', '_blank');
+
+    if (!printWindow) {
+        saleMessage.value = 'Impossible d’ouvrir la fenêtre d’impression.';
+        notifyError(saleMessage.value);
+        return;
+    }
+
+    writePrintableDocument(
+        printWindow,
+        salesView.value === 'proformas' ? 'Factures Pro forma affichées' : 'Ventes affichées',
+        `Total : ${formatMoney(salesView.value === 'proformas' ? filteredProformasTotal.value : filteredSalesTotal.value)}`,
+        `<table>
+            <thead><tr><th>Facture</th><th>Vendeur</th><th>Client</th><th>Paiement</th><th>Statut</th><th>Total</th><th>Date</th><th>Lignes</th></tr></thead>
+            <tbody>${printableRows}</tbody>
+            <tfoot><tr><td colspan="5">Total</td><td colspan="3">${formatMoney(salesView.value === 'proformas' ? filteredProformasTotal.value : filteredSalesTotal.value)}</td></tr></tfoot>
+        </table>`
+    );
+    notifySuccess('Impression PDF lancée.');
 }
 
 async function payReceivable(receivable) {
@@ -2476,6 +3435,72 @@ async function payReceivable(receivable) {
         notifySuccess(receivableMessage.value);
         await loadDashboard();
         closeReceivablePayment();
+    } catch (error) {
+        receivableMessage.value = error.message;
+        notifyError(receivableMessage.value);
+    }
+}
+
+async function updateReceivableAmount() {
+    if (!editingReceivable.value) {
+        return;
+    }
+
+    receivableMessage.value = '';
+
+    try {
+        const response = await fetch(`/api/businesses/${props.businessId}/receivables/${editingReceivable.value.id}`, {
+            method: 'PUT',
+            headers: requestHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({
+                amount_due: receivableAmountForm.amount_due,
+            }),
+        });
+
+        if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.message || 'Modification invalide.');
+        }
+
+        receivableMessage.value = 'Montant de la créance modifié.';
+        notifySuccess(receivableMessage.value);
+        const editedId = editingReceivable.value.id;
+        closeReceivableAmountEdit();
+        await loadDashboard();
+        refreshSelectedReceivableDetails(editedId);
+    } catch (error) {
+        receivableMessage.value = error.message;
+        notifyError(receivableMessage.value);
+    }
+}
+
+async function updateReceivablePaymentAmount() {
+    if (!selectedReceivableDetails.value || !editingReceivablePayment.value) {
+        return;
+    }
+
+    receivableMessage.value = '';
+
+    try {
+        const response = await fetch(`/api/businesses/${props.businessId}/receivables/${selectedReceivableDetails.value.id}/payments/${editingReceivablePayment.value.id}`, {
+            method: 'PUT',
+            headers: requestHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({
+                amount: receivablePaymentEditForm.amount,
+            }),
+        });
+
+        if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.message || 'Modification du paiement invalide.');
+        }
+
+        receivableMessage.value = 'Montant du paiement modifié.';
+        notifySuccess(receivableMessage.value);
+        const receivableId = selectedReceivableDetails.value.id;
+        closeReceivablePaymentEdit();
+        await loadDashboard();
+        refreshSelectedReceivableDetails(receivableId);
     } catch (error) {
         receivableMessage.value = error.message;
         notifyError(receivableMessage.value);
@@ -2573,6 +3598,18 @@ function closeReceivablePayment() {
     selectedReceivable.value = null;
 }
 
+function openReceivableAmountEdit(receivable) {
+    editingReceivable.value = receivable;
+    receivableAmountForm.amount_due = receivable.amount_due || '';
+    showReceivableAmountEditModal.value = true;
+}
+
+function closeReceivableAmountEdit() {
+    showReceivableAmountEditModal.value = false;
+    editingReceivable.value = null;
+    receivableAmountForm.amount_due = '';
+}
+
 function openReceivableDetails(receivable) {
     selectedReceivableDetails.value = receivable;
     showReceivableDetailsModal.value = true;
@@ -2580,7 +3617,32 @@ function openReceivableDetails(receivable) {
 
 function closeReceivableDetails() {
     showReceivableDetailsModal.value = false;
+    showReceivableDetailsPrintModal.value = false;
     selectedReceivableDetails.value = null;
+    closeReceivablePaymentEdit();
+}
+
+function refreshSelectedReceivableDetails(receivableId) {
+    if (!showReceivableDetailsModal.value || !selectedReceivableDetails.value) {
+        return;
+    }
+
+    const refreshed = receivables.value.find((receivable) => receivable.id === receivableId);
+    if (refreshed) {
+        selectedReceivableDetails.value = refreshed;
+    }
+}
+
+function openReceivablePaymentEdit(payment) {
+    editingReceivablePayment.value = payment;
+    receivablePaymentEditForm.amount = payment.amount || '';
+    showReceivablePaymentEditModal.value = true;
+}
+
+function closeReceivablePaymentEdit() {
+    showReceivablePaymentEditModal.value = false;
+    editingReceivablePayment.value = null;
+    receivablePaymentEditForm.amount = '';
 }
 
 function openCustomerDetails(customer) {
@@ -2740,6 +3802,98 @@ function printFilteredReceivables() {
     notifySuccess('Impression PDF lancée.');
 }
 
+function chooseReceivableDetailsPrint(format) {
+    showReceivableDetailsPrintModal.value = false;
+    if (format === 'excel') {
+        exportReceivableDetailsExcel();
+        return;
+    }
+
+    printReceivableDetails();
+}
+
+function receivableDetailsRowsForExport() {
+    const receivable = selectedReceivableDetails.value;
+    if (!receivable) {
+        return [];
+    }
+
+    const payments = receivable.payments || [];
+    return payments.length
+        ? payments.map((payment) => ({
+            date: formatDate(payment.paid_at),
+            method: paymentLabel(payment.method),
+            reference: payment.reference || '',
+            amount: Number(payment.amount || 0),
+        }))
+        : [];
+}
+
+function exportReceivableDetailsExcel() {
+    const receivable = selectedReceivableDetails.value;
+    if (!receivable) {
+        return;
+    }
+
+    const rows = receivableDetailsRowsForExport();
+    const bodyRows = rows.length
+        ? rows.map((row) => `<tr><td>${printEscapeHtml(row.date)}</td><td>${printEscapeHtml(row.method)}</td><td>${printEscapeHtml(row.reference || '-')}</td><td>${row.amount}</td></tr>`).join('')
+        : '<tr><td colspan="4">Aucun paiement enregistré.</td></tr>';
+    const html = `
+        <table>
+            <thead><tr><th colspan="4">Situation créance - ${printEscapeHtml(receivable.customer?.name || 'Client')}</th></tr></thead>
+            <tbody>
+                <tr><td>Montant initial</td><td colspan="3">${Number(receivable.amount_due || 0)}</td></tr>
+                <tr><td>Payé</td><td colspan="3">${Number(receivable.amount_paid || 0)}</td></tr>
+                <tr><td>Solde dû</td><td colspan="3">${Number(receivable.remaining || 0)}</td></tr>
+                <tr><td>Échéance</td><td colspan="3">${printEscapeHtml(formatDateOnly(receivable.due_date))}</td></tr>
+                <tr><td>Statut</td><td colspan="3">${printEscapeHtml(receivableStatusLabel(receivable.status))}</td></tr>
+                <tr><th>Date</th><th>Moyen</th><th>Référence</th><th>Montant</th></tr>
+                ${bodyRows}
+            </tbody>
+            <tfoot><tr><td colspan="3">Total payé</td><td>${Number(receivable.amount_paid || 0)}</td></tr></tfoot>
+        </table>
+    `;
+    const blob = new Blob([`\uFEFF${html}`], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `situation-creance-${receivable.id}-${new Date().toISOString().slice(0, 10)}.xls`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+    notifySuccess('Export Excel généré.');
+}
+
+function printReceivableDetails() {
+    const receivable = selectedReceivableDetails.value;
+    if (!receivable) {
+        return;
+    }
+
+    const payments = receivable.payments || [];
+    const printableRows = payments.length
+        ? payments.map((payment) => `<tr><td>${printEscapeHtml(formatDate(payment.paid_at))}</td><td>${printEscapeHtml(paymentLabel(payment.method))}</td><td>${printEscapeHtml(payment.reference || '-')}</td><td>${formatMoney(payment.amount)}</td></tr>`).join('')
+        : '<tr><td colspan="4">Aucun paiement enregistré.</td></tr>';
+    const printWindow = window.open('', '_blank');
+
+    if (!printWindow) {
+        receivableMessage.value = 'Impossible d’ouvrir la fenêtre d’impression.';
+        notifyError(receivableMessage.value);
+        return;
+    }
+
+    writePrintableDocument(
+        printWindow,
+        `Situation créance - ${receivable.customer?.name || 'Client'}`,
+        `Montant initial : ${formatMoney(receivable.amount_due)} - Payé : ${formatMoney(receivable.amount_paid)} - Solde dû : ${formatMoney(receivable.remaining)} - Statut : ${printEscapeHtml(receivableStatusLabel(receivable.status))}`,
+        `<table>
+            <thead><tr><th>Date</th><th>Moyen</th><th>Référence</th><th>Montant</th></tr></thead>
+            <tbody>${printableRows}</tbody>
+            <tfoot><tr><td colspan="3">Total payé</td><td>${formatMoney(receivable.amount_paid)}</td></tr></tfoot>
+        </table>`
+    );
+    notifySuccess('Impression PDF lancée.');
+}
+
 function chooseCustomerPrint(format) {
     showCustomerPrintModal.value = false;
     if (format === 'excel') {
@@ -2820,6 +3974,216 @@ function printFilteredCustomers() {
     notifySuccess('Impression PDF lancée.');
 }
 
+function openSupplierDebtDateFilter() {
+    supplierDebtDateMode.value = supplierDebtFilters.startDate || supplierDebtFilters.endDate ? 'range' : 'exact';
+    Object.assign(supplierDebtDateDraft, {
+        exactDate: supplierDebtFilters.exactDate,
+        startDate: supplierDebtFilters.startDate,
+        endDate: supplierDebtFilters.endDate,
+    });
+    showSupplierDebtDateModal.value = true;
+}
+
+function applySupplierDebtDateFilter() {
+    if (supplierDebtDateMode.value === 'exact') {
+        supplierDebtFilters.exactDate = supplierDebtDateDraft.exactDate;
+        supplierDebtFilters.startDate = '';
+        supplierDebtFilters.endDate = '';
+    } else {
+        supplierDebtFilters.exactDate = '';
+        supplierDebtFilters.startDate = supplierDebtDateDraft.startDate;
+        supplierDebtFilters.endDate = supplierDebtDateDraft.endDate;
+    }
+
+    showSupplierDebtDateModal.value = false;
+}
+
+function clearSupplierDebtDateFilter() {
+    Object.assign(supplierDebtFilters, {
+        exactDate: '',
+        startDate: '',
+        endDate: '',
+    });
+    Object.assign(supplierDebtDateDraft, {
+        exactDate: '',
+        startDate: '',
+        endDate: '',
+    });
+    showSupplierDebtDateModal.value = false;
+}
+
+function chooseSupplierDebtPrint(format) {
+    showSupplierDebtPrintModal.value = false;
+    if (format === 'excel') {
+        exportFilteredSupplierDebtsExcel();
+        return;
+    }
+
+    printFilteredSupplierDebts();
+}
+
+function supplierDebtRowsForExport() {
+    return filteredSupplierDebts.value.map((debt) => ({
+        supplier: debt.supplier?.name || 'Fournisseur',
+        phone: debt.supplier?.phone || '',
+        amountDue: Number(debt.amount_due || 0),
+        amountPaid: Number(debt.amount_paid || 0),
+        remaining: Number(debt.remaining || 0),
+        dueDate: formatDateOnly(debt.due_date),
+        status: receivableStatusLabel(debt.status),
+    }));
+}
+
+function exportFilteredSupplierDebtsExcel() {
+    const rows = supplierDebtRowsForExport();
+    const bodyRows = rows.length
+        ? rows.map((row) => `<tr><td>${printEscapeHtml(row.supplier)}</td><td>${printEscapeHtml(row.phone || '-')}</td><td>${row.amountDue}</td><td>${row.amountPaid}</td><td>${row.remaining}</td><td>${printEscapeHtml(row.dueDate)}</td><td>${printEscapeHtml(row.status)}</td></tr>`).join('')
+        : '<tr><td colspan="7">Aucune dette affichée.</td></tr>';
+    const html = `
+        <table>
+            <thead><tr><th>Fournisseur</th><th>Téléphone</th><th>Montant dû</th><th>Payé</th><th>Reste</th><th>Échéance</th><th>Statut</th></tr></thead>
+            <tbody>${bodyRows}</tbody>
+            <tfoot><tr><td colspan="4">Total restant</td><td>${filteredSupplierDebtsTotal.value}</td><td colspan="2"></td></tr></tfoot>
+        </table>
+    `;
+    const blob = new Blob([`\uFEFF${html}`], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `dettes-fournisseurs-${new Date().toISOString().slice(0, 10)}.xls`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+    notifySuccess('Export Excel généré.');
+}
+
+function printFilteredSupplierDebts() {
+    const rows = supplierDebtRowsForExport();
+    const printableRows = rows.length
+        ? rows.map((row) => `<tr><td>${printEscapeHtml(row.supplier)}</td><td>${printEscapeHtml(row.phone || '-')}</td><td>${formatMoney(row.amountDue)}</td><td>${formatMoney(row.amountPaid)}</td><td>${formatMoney(row.remaining)}</td><td>${printEscapeHtml(row.dueDate)}</td><td>${printEscapeHtml(row.status)}</td></tr>`).join('')
+        : '<tr><td colspan="7">Aucune dette affichée.</td></tr>';
+    const printWindow = window.open('', '_blank');
+
+    if (!printWindow) {
+        supplierDebtMessage.value = 'Impossible d’ouvrir la fenêtre d’impression.';
+        notifyError(supplierDebtMessage.value);
+        return;
+    }
+
+    writePrintableDocument(
+        printWindow,
+        'Dettes fournisseurs affichées',
+        `Total restant : ${formatMoney(filteredSupplierDebtsTotal.value)}`,
+        `<table>
+            <thead><tr><th>Fournisseur</th><th>Téléphone</th><th>Montant dû</th><th>Payé</th><th>Reste</th><th>Échéance</th><th>Statut</th></tr></thead>
+            <tbody>${printableRows}</tbody>
+            <tfoot><tr><td colspan="4">Total restant</td><td colspan="3">${formatMoney(filteredSupplierDebtsTotal.value)}</td></tr></tfoot>
+        </table>`
+    );
+    notifySuccess('Impression PDF lancée.');
+}
+
+function chooseSupplierPrint(format) {
+    showSupplierPrintModal.value = false;
+    if (format === 'excel') {
+        exportFilteredSuppliersExcel();
+        return;
+    }
+
+    printFilteredSuppliers();
+}
+
+function supplierRowsForExport() {
+    return filteredSuppliers.value.map((supplier) => ({
+        name: supplier.name || 'Fournisseur',
+        phone: supplier.phone || '',
+        totalDebt: Number(supplier.totalDebt || 0),
+        remainingDebt: Number(supplier.remainingDebt || 0),
+        situation: supplier.situation || '',
+    }));
+}
+
+function exportFilteredSuppliersExcel() {
+    const rows = supplierRowsForExport();
+    const bodyRows = rows.length
+        ? rows.map((row) => `<tr><td>${printEscapeHtml(row.name)}</td><td>${printEscapeHtml(row.phone || '-')}</td><td>${row.totalDebt}</td><td>${row.remainingDebt}</td><td>${printEscapeHtml(row.situation)}</td></tr>`).join('')
+        : '<tr><td colspan="5">Aucun fournisseur affiché.</td></tr>';
+    const html = `
+        <table>
+            <thead><tr><th>Fournisseur</th><th>Téléphone</th><th>Total dû</th><th>Reste</th><th>Situation</th></tr></thead>
+            <tbody>${bodyRows}</tbody>
+            <tfoot><tr><td colspan="3">Reste dû</td><td>${filteredSuppliersDebtTotal.value}</td><td></td></tr></tfoot>
+        </table>
+    `;
+    const blob = new Blob([`\uFEFF${html}`], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `fournisseurs-${new Date().toISOString().slice(0, 10)}.xls`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+    notifySuccess('Export Excel généré.');
+}
+
+function printFilteredSuppliers() {
+    const rows = supplierRowsForExport();
+    const printableRows = rows.length
+        ? rows.map((row) => `<tr><td>${printEscapeHtml(row.name)}</td><td>${printEscapeHtml(row.phone || '-')}</td><td>${formatMoney(row.totalDebt)}</td><td>${formatMoney(row.remainingDebt)}</td><td>${printEscapeHtml(row.situation)}</td></tr>`).join('')
+        : '<tr><td colspan="5">Aucun fournisseur affiché.</td></tr>';
+    const printWindow = window.open('', '_blank');
+
+    if (!printWindow) {
+        supplierDebtMessage.value = 'Impossible d’ouvrir la fenêtre d’impression.';
+        notifyError(supplierDebtMessage.value);
+        return;
+    }
+
+    writePrintableDocument(
+        printWindow,
+        'Fournisseurs affichés',
+        `Reste dû : ${formatMoney(filteredSuppliersDebtTotal.value)}`,
+        `<table>
+            <thead><tr><th>Fournisseur</th><th>Téléphone</th><th>Total dû</th><th>Reste</th><th>Situation</th></tr></thead>
+            <tbody>${printableRows}</tbody>
+            <tfoot><tr><td colspan="3">Reste dû</td><td colspan="2">${formatMoney(filteredSuppliersDebtTotal.value)}</td></tr></tfoot>
+        </table>`
+    );
+    notifySuccess('Impression PDF lancée.');
+}
+
+function openSupplierDebtCreateModal() {
+    supplierDebtMessage.value = '';
+    Object.assign(supplierDebtForm, {
+        supplier_id: '',
+        supplier_name: '',
+        supplier_phone: '',
+        payment_terms: '',
+        amount_due: '',
+        due_date: '',
+    });
+    showSupplierDebtCreateModal.value = true;
+}
+
+function openSupplierCreateModal() {
+    supplierMessage.value = '';
+    Object.assign(supplierForm, {
+        name: '',
+        phone: '',
+        payment_terms: '',
+    });
+    showSupplierCreateModal.value = true;
+}
+
+function openSupplierPhoneEdit(supplier) {
+    supplierMessage.value = '';
+    editingSupplier.value = supplier;
+    supplierPhoneForm.phone = supplier.phone || '';
+    showSupplierPhoneEditModal.value = true;
+}
+
+function closeSupplierPhoneEdit() {
+    showSupplierPhoneEditModal.value = false;
+    editingSupplier.value = null;
+    supplierPhoneForm.phone = '';
+}
+
 async function saveSupplierDebt() {
     savingSupplierDebt.value = true;
     supplierDebtMessage.value = '';
@@ -2837,6 +4201,7 @@ async function saveSupplierDebt() {
         }
 
         Object.assign(supplierDebtForm, {
+            supplier_id: '',
             supplier_name: '',
             supplier_phone: '',
             payment_terms: '',
@@ -2846,11 +4211,77 @@ async function saveSupplierDebt() {
         supplierDebtMessage.value = 'Dette fournisseur enregistrée.';
         notifySuccess(supplierDebtMessage.value);
         await loadDashboard();
+        showSupplierDebtCreateModal.value = false;
     } catch (error) {
         supplierDebtMessage.value = error.message;
         notifyError(supplierDebtMessage.value);
     } finally {
         savingSupplierDebt.value = false;
+    }
+}
+
+async function saveSupplier() {
+    savingSupplier.value = true;
+    supplierMessage.value = '';
+
+    try {
+        const response = await fetch(`/api/businesses/${props.businessId}/suppliers`, {
+            method: 'POST',
+            headers: requestHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify(supplierForm),
+        });
+
+        if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.message || 'Fournisseur invalide.');
+        }
+
+        Object.assign(supplierForm, {
+            name: '',
+            phone: '',
+            payment_terms: '',
+        });
+        supplierMessage.value = 'Fournisseur enregistré.';
+        notifySuccess(supplierMessage.value);
+        await loadDashboard();
+        showSupplierCreateModal.value = false;
+    } catch (error) {
+        supplierMessage.value = error.message;
+        notifyError(supplierMessage.value);
+    } finally {
+        savingSupplier.value = false;
+    }
+}
+
+async function updateSupplierPhone() {
+    if (!editingSupplier.value?.id) {
+        return;
+    }
+
+    savingSupplier.value = true;
+    supplierMessage.value = '';
+
+    try {
+        const response = await fetch(`/api/businesses/${props.businessId}/suppliers/${editingSupplier.value.id}`, {
+            method: 'PUT',
+            headers: requestHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify(supplierPhoneForm),
+        });
+
+        if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.message || 'Téléphone fournisseur invalide.');
+        }
+
+        supplierMessage.value = 'Téléphone fournisseur modifié.';
+        notifySuccess(supplierMessage.value);
+        closeSupplierPhoneEdit();
+        await loadDashboard();
+    } catch (error) {
+        supplierMessage.value = error.message;
+        notifyError(supplierMessage.value);
+    } finally {
+        savingSupplier.value = false;
     }
 }
 
@@ -3057,6 +4488,8 @@ async function saveEmployee() {
 
         Object.assign(employeeForm, {
             name: '',
+            phone: '',
+            password: '',
             position: '',
             type: 'seller',
             salary: '',

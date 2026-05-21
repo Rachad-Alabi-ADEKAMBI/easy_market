@@ -372,7 +372,7 @@ Route::get('/api/businesses/{business}/dashboard', function (Business $business)
             ->get(),
         'sales' => Sale::query()
             ->where('business_id', $business->id)
-            ->with(['items', 'customer'])
+            ->with(['items', 'customer', 'seller:id,name,phone'])
             ->latest()
             ->limit(20)
             ->get(),
@@ -406,7 +406,10 @@ Route::get('/api/businesses/{business}/dashboard', function (Business $business)
             ->get(),
         'employees' => Employee::query()
             ->where('business_id', $business->id)
-            ->with(['advances' => fn ($query) => $query->latest('advanced_on')->limit(5)])
+            ->with([
+                'user:id,name,phone',
+                'advances' => fn ($query) => $query->latest('advanced_on')->limit(5),
+            ])
             ->latest()
             ->limit(20)
             ->get(),
@@ -629,11 +632,16 @@ Route::post('/api/businesses/{business}/employees', function (Request $request, 
 
     $validator = Validator::make($request->all(), [
         'name' => ['required', 'string', 'max:255'],
+        'phone' => ['nullable', 'string', 'max:30', Rule::unique('users', 'phone')->whereNotNull('phone')],
+        'password' => ['nullable', 'string', 'min:8'],
         'position' => ['required', 'string', 'max:255'],
         'type' => ['required', 'in:seller,cashier,accountant,observer'],
         'salary' => ['required', 'integer', 'min:0'],
         'hired_at' => ['nullable', 'date'],
     ]);
+
+    $validator->sometimes('phone', ['required', 'regex:/^01\d{8}$/'], fn ($input) => $input->type === 'seller');
+    $validator->sometimes('password', ['required'], fn ($input) => $input->type === 'seller');
 
     if ($validator->fails()) {
         return response()->json([
@@ -642,8 +650,30 @@ Route::post('/api/businesses/{business}/employees', function (Request $request, 
         ], 422);
     }
 
+    $user = null;
+    if ($request->input('type') === 'seller') {
+        $phone = trim((string) $request->input('phone'));
+        $user = User::create([
+            'name' => $request->input('name'),
+            'phone' => $phone,
+            'email' => $phone.'@phone.easymarket.local',
+            'password' => $request->input('password'),
+            'role' => 'seller',
+            'can_edit_prices' => false,
+            'is_active' => true,
+        ]);
+
+        $business->users()->syncWithoutDetaching([
+            $user->id => [
+                'role' => 'seller',
+                'can_edit_prices' => false,
+            ],
+        ]);
+    }
+
     $employee = Employee::create([
         'business_id' => $business->id,
+        'user_id' => $user?->id,
         'name' => $request->input('name'),
         'position' => $request->input('position'),
         'type' => $request->input('type'),
@@ -652,7 +682,7 @@ Route::post('/api/businesses/{business}/employees', function (Request $request, 
         'is_active' => true,
     ]);
 
-    return response()->json($employee, 201);
+    return response()->json($employee->load('user'), 201);
 });
 
 Route::post('/api/businesses/{business}/employees/{employee}/advances', function (Request $request, Business $business, Employee $employee) {
@@ -778,13 +808,68 @@ Route::post('/api/businesses/{business}/expenses', function (Request $request, B
     return response()->json($expense, 201);
 });
 
+Route::post('/api/businesses/{business}/suppliers', function (Request $request, Business $business) {
+    authorizeBusinessAccess($business, $request);
+    ensureActiveSubscription($business);
+
+    $validator = Validator::make($request->all(), [
+        'name' => ['required', 'string', 'max:255'],
+        'phone' => ['required', 'string', 'max:30'],
+        'payment_terms' => ['nullable', 'string', 'max:255'],
+    ]);
+
+    if ($validator->fails()) {
+        return response()->json([
+            'message' => 'Le fournisseur est invalide.',
+            'errors' => $validator->errors(),
+        ], 422);
+    }
+
+    $supplier = Supplier::updateOrCreate(
+        [
+            'business_id' => $business->id,
+            'name' => $request->input('name'),
+        ],
+        [
+            'phone' => $request->input('phone'),
+            'payment_terms' => $request->input('payment_terms'),
+        ]
+    );
+
+    return response()->json($supplier, 201);
+});
+
+Route::put('/api/businesses/{business}/suppliers/{supplier}', function (Request $request, Business $business, Supplier $supplier) {
+    authorizeBusinessAccess($business, $request);
+    abort_unless($supplier->business_id === $business->id, 404);
+    ensureActiveSubscription($business);
+
+    $validator = Validator::make($request->all(), [
+        'phone' => ['required', 'string', 'max:30'],
+    ]);
+
+    if ($validator->fails()) {
+        return response()->json([
+            'message' => 'Le téléphone du fournisseur est invalide.',
+            'errors' => $validator->errors(),
+        ], 422);
+    }
+
+    $supplier->update([
+        'phone' => $request->input('phone'),
+    ]);
+
+    return response()->json($supplier);
+});
+
 Route::post('/api/businesses/{business}/supplier-debts', function (Request $request, Business $business) {
     authorizeBusinessAccess($business, $request);
     ensureActiveSubscription($business);
 
     $validator = Validator::make($request->all(), [
-        'supplier_name' => ['required', 'string', 'max:255'],
-        'supplier_phone' => ['nullable', 'string', 'max:30'],
+        'supplier_id' => ['nullable', 'integer', 'exists:suppliers,id'],
+        'supplier_name' => ['required_without:supplier_id', 'nullable', 'string', 'max:255'],
+        'supplier_phone' => ['required_without:supplier_id', 'nullable', 'string', 'max:30'],
         'payment_terms' => ['nullable', 'string', 'max:255'],
         'amount_due' => ['required', 'integer', 'min:1'],
         'due_date' => ['nullable', 'date'],
@@ -797,16 +882,18 @@ Route::post('/api/businesses/{business}/supplier-debts', function (Request $requ
         ], 422);
     }
 
-    $supplier = Supplier::firstOrCreate(
-        [
-            'business_id' => $business->id,
-            'name' => $request->input('supplier_name'),
-        ],
-        [
-            'phone' => $request->input('supplier_phone'),
-            'payment_terms' => $request->input('payment_terms'),
-        ]
-    );
+    $supplier = $request->filled('supplier_id')
+        ? Supplier::query()->where('business_id', $business->id)->findOrFail($request->integer('supplier_id'))
+        : Supplier::firstOrCreate(
+            [
+                'business_id' => $business->id,
+                'name' => $request->input('supplier_name'),
+            ],
+            [
+                'phone' => $request->input('supplier_phone'),
+                'payment_terms' => $request->input('payment_terms'),
+            ]
+        );
 
     $debt = SupplierDebt::create([
         'business_id' => $business->id,
@@ -890,6 +977,35 @@ Route::post('/api/businesses/{business}/receivables', function (Request $request
     return response()->json(enrichReceivable($receivable->load('customer')), 201);
 });
 
+Route::put('/api/businesses/{business}/receivables/{receivable}', function (Request $request, Business $business, Receivable $receivable) {
+    authorizeBusinessAccess($business, $request);
+    abort_unless($receivable->business_id === $business->id, 404);
+    ensureActiveSubscription($business);
+
+    $validator = Validator::make($request->all(), [
+        'amount_due' => ['required', 'integer', 'min:1'],
+    ]);
+
+    $validator->after(function ($validator) use ($request, $receivable) {
+        if ($request->integer('amount_due') < (int) $receivable->amount_paid) {
+            $validator->errors()->add('amount_due', 'Le montant de la créance ne peut pas être inférieur au montant déjà payé.');
+        }
+    });
+
+    if ($validator->fails()) {
+        return response()->json([
+            'message' => 'Le montant de la créance est invalide.',
+            'errors' => $validator->errors(),
+        ], 422);
+    }
+
+    $receivable->forceFill(['amount_due' => $request->integer('amount_due')]);
+    $receivable->status = receivableStatus($receivable);
+    $receivable->save();
+
+    return response()->json(enrichReceivable($receivable->fresh('customer')));
+});
+
 Route::post('/api/businesses/{business}/supplier-debts/{debt}/payments', function (Request $request, Business $business, SupplierDebt $debt) {
     authorizeBusinessAccess($business, $request);
     abort_unless($debt->business_id === $business->id, 404);
@@ -965,6 +1081,53 @@ Route::post('/api/businesses/{business}/receivables/{receivable}/payments', func
     ]);
 
     return response()->json(enrichReceivable($receivable->load('customer')));
+});
+
+Route::put('/api/businesses/{business}/receivables/{receivable}/payments/{payment}', function (Request $request, Business $business, Receivable $receivable, Payment $payment) {
+    authorizeBusinessAccess($business, $request);
+    abort_unless($receivable->business_id === $business->id, 404);
+    abort_unless($payment->business_id === $business->id && $payment->receivable_id === $receivable->id && $payment->type === 'receivable', 404);
+    ensureActiveSubscription($business);
+
+    $validator = Validator::make($request->all(), [
+        'amount' => ['required', 'integer', 'min:1'],
+    ]);
+
+    $otherPaymentsTotal = Payment::query()
+        ->where('business_id', $business->id)
+        ->where('receivable_id', $receivable->id)
+        ->where('type', 'receivable')
+        ->whereKeyNot($payment->id)
+        ->sum('amount');
+
+    $validator->after(function ($validator) use ($request, $receivable, $otherPaymentsTotal) {
+        if ($request->integer('amount') + $otherPaymentsTotal > (int) $receivable->amount_due) {
+            $validator->errors()->add('amount', 'Le total des paiements ne peut pas dépasser le montant de la créance.');
+        }
+    });
+
+    if ($validator->fails()) {
+        return response()->json([
+            'message' => 'Le montant du paiement est invalide.',
+            'errors' => $validator->errors(),
+        ], 422);
+    }
+
+    DB::transaction(function () use ($request, $receivable, $payment) {
+        $payment->update(['amount' => $request->integer('amount')]);
+
+        $amountPaid = Payment::query()
+            ->where('business_id', $receivable->business_id)
+            ->where('receivable_id', $receivable->id)
+            ->where('type', 'receivable')
+            ->sum('amount');
+
+        $receivable->forceFill(['amount_paid' => $amountPaid]);
+        $receivable->status = receivableStatus($receivable);
+        $receivable->save();
+    });
+
+    return response()->json(enrichReceivable($receivable->fresh('customer')));
 });
 
 Route::delete('/api/businesses/{business}/receivables/{receivable}', function (Request $request, Business $business, Receivable $receivable) {
@@ -1155,9 +1318,22 @@ Route::post('/api/businesses/{business}/sales', function (Request $request, Busi
     authorizeBusinessAccess($business, $request);
     ensureActiveSubscription($business);
 
+    $seller = Auth::user();
+    $sellerPivot = $seller ? $business->users()->where('users.id', $seller->id)->first()?->pivot : null;
+    $canSell = $seller
+        && $business->owner_id !== $seller->id
+        && ($sellerPivot?->role === 'seller' || $seller->role === 'seller');
+
+    if (! $canSell) {
+        return response()->json([
+            'message' => 'Seuls les vendeurs peuvent enregistrer une vente.',
+        ], 403);
+    }
+
     $validator = Validator::make($request->all(), [
         'customer_name' => ['nullable', 'string', 'max:255'],
         'customer_phone' => ['nullable', 'string', 'max:30'],
+        'type' => ['nullable', 'in:invoice,proforma'],
         'payment_method' => ['required', 'in:cash,mobile_money,credit'],
         'credit_due_date' => ['nullable', 'date', 'required_if:payment_method,credit'],
         'items' => ['required', 'array', 'min:1'],
@@ -1173,7 +1349,7 @@ Route::post('/api/businesses/{business}/sales', function (Request $request, Busi
         ], 422);
     }
 
-    $sale = DB::transaction(function () use ($request, $business) {
+    $sale = DB::transaction(function () use ($request, $business, $seller) {
         $customer = null;
 
         if ($request->filled('customer_name') || $request->filled('customer_phone')) {
@@ -1184,14 +1360,17 @@ Route::post('/api/businesses/{business}/sales', function (Request $request, Busi
             ]);
         }
 
+        $documentType = $request->input('type', 'invoice');
+
         $sale = Sale::create([
             'business_id' => $business->id,
             'customer_id' => $customer?->id,
+            'seller_id' => $seller->id,
             'number' => nextSaleNumber($business),
-            'type' => 'invoice',
+            'type' => $documentType,
             'payment_method' => $request->input('payment_method'),
-            'status' => 'completed',
-            'credit_due_date' => $request->input('payment_method') === 'credit' ? $request->input('credit_due_date') : null,
+            'status' => $documentType === 'proforma' ? 'draft' : 'completed',
+            'credit_due_date' => $documentType === 'invoice' && $request->input('payment_method') === 'credit' ? $request->input('credit_due_date') : null,
             'sold_at' => now(),
         ]);
 
@@ -1207,7 +1386,7 @@ Route::post('/api/businesses/{business}/sales', function (Request $request, Busi
             $quantity = (float) $line['quantity'];
             $discount = (int) ($line['discount'] ?? 0);
 
-            if ((float) $product->stock_quantity < $quantity) {
+            if ($documentType === 'invoice' && (float) $product->stock_quantity < $quantity) {
                 abort(response()->json([
                     'message' => "Stock insuffisant pour {$product->name}.",
                 ], 422));
@@ -1227,16 +1406,18 @@ Route::post('/api/businesses/{business}/sales', function (Request $request, Busi
                 'total' => $lineTotal,
             ]);
 
-            $product->decrement('stock_quantity', $quantity);
+            if ($documentType === 'invoice') {
+                $product->decrement('stock_quantity', $quantity);
 
-            StockMovement::create([
-                'business_id' => $business->id,
-                'product_id' => $product->id,
-                'type' => 'sale',
-                'quantity' => -$quantity,
-                'reason' => 'Vente '.$sale->number,
-                'moved_at' => now(),
-            ]);
+                StockMovement::create([
+                    'business_id' => $business->id,
+                    'product_id' => $product->id,
+                    'type' => 'sale',
+                    'quantity' => -$quantity,
+                    'reason' => 'Vente '.$sale->number,
+                    'moved_at' => now(),
+                ]);
+            }
         }
 
         $total = max(0, $subtotal - $discountTotal);
@@ -1245,6 +1426,10 @@ Route::post('/api/businesses/{business}/sales', function (Request $request, Busi
             'discount' => $discountTotal,
             'total' => $total,
         ]);
+
+        if ($documentType === 'proforma') {
+            return $sale->load(['items', 'customer', 'seller:id,name,phone']);
+        }
 
         if ($request->input('payment_method') === 'credit') {
             Receivable::create([
@@ -1269,7 +1454,7 @@ Route::post('/api/businesses/{business}/sales', function (Request $request, Busi
             ]);
         }
 
-        return $sale->load('items');
+        return $sale->load(['items', 'customer', 'seller:id,name,phone']);
     });
 
     return response()->json($sale, 201);

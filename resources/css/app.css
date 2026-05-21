@@ -278,6 +278,21 @@ a {
     gap: 10px;
 }
 
+.choice-modal > .section-title h2 {
+    font-size: 26px;
+    line-height: 1.15;
+}
+
+.choice-actions .btn-primary {
+    background: var(--primary-800);
+    color: white;
+}
+
+.choice-actions .btn-light {
+    background: var(--gold);
+    color: var(--primary-950);
+}
+
 .choice-form {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -495,6 +510,18 @@ a {
 
 .activation-status-card p {
     margin: 0;
+}
+
+.highlight-link {
+    color: var(--primary-900);
+    font-weight: 800;
+    text-decoration: underline;
+    text-decoration-thickness: 2px;
+    text-underline-offset: 3px;
+}
+
+.highlight-link:hover {
+    color: var(--primary-700);
 }
 
 .top {
@@ -741,7 +768,8 @@ p {
 
 .payment-history-row {
     display: grid;
-    grid-template-columns: 1fr auto;
+    grid-template-columns: 1fr auto auto;
+    align-items: center;
     gap: 3px 10px;
     padding: 10px;
     border: 1px solid var(--line);
@@ -751,6 +779,12 @@ p {
 .payment-history-row small {
     grid-column: 1 / -1;
     color: var(--muted);
+}
+
+.payment-edit-icon {
+    width: 34px;
+    height: 34px;
+    min-height: 34px;
 }
 
 .customer-contact-actions {
@@ -1507,6 +1541,35 @@ td small {
 .table-icon:hover {
     border-color: var(--primary-700);
     background: var(--primary-900);
+}
+
+.table-wrap td > .table-icon:not(.whatsapp):not(.danger-icon),
+.table-wrap .row-actions .table-icon:nth-child(1):not(.whatsapp):not(.danger-icon) {
+    background: #e8f1ff;
+    color: #1d4ed8;
+}
+
+.table-wrap .row-actions .table-icon:nth-child(2):not(.whatsapp):not(.danger-icon),
+.inline-payment .table-icon:not(.whatsapp):not(.danger-icon) {
+    background: #e8f8ef;
+    color: #15803d;
+}
+
+.table-wrap .row-actions .table-icon:nth-child(3):not(.whatsapp):not(.danger-icon) {
+    background: #fff4d8;
+    color: #b45309;
+}
+
+.table-wrap .row-actions .table-icon:nth-child(4):not(.whatsapp):not(.danger-icon) {
+    background: #f1e8ff;
+    color: #6d28d9;
+}
+
+.table-wrap td > .table-icon:not(.whatsapp):not(.danger-icon):hover,
+.table-wrap .row-actions .table-icon:not(.whatsapp):not(.danger-icon):hover,
+.inline-payment .table-icon:not(.whatsapp):not(.danger-icon):hover {
+    filter: brightness(.96);
+    border-color: currentColor;
 }
 
 .table-icon:disabled {
