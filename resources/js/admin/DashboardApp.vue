@@ -438,13 +438,29 @@
                 </div>
             </section>
 
-            <section v-if="activeSection === 'customers'" class="card">
+            <div v-if="activeSection === 'customers'" class="customer-view-switch">
+                <button :class="['customer-switch-card', customerView === 'receivables' ? 'active' : '']" type="button" @click="customerView = 'receivables'">
+                    <i class="fa-solid fa-hand-holding-dollar"></i>
+                    <span>Créances</span>
+                    <strong>{{ formatMoney(filteredReceivablesTotal) }}</strong>
+                </button>
+                <button :class="['customer-switch-card', customerView === 'clients' ? 'active' : '']" type="button" @click="customerView = 'clients'">
+                    <i class="fa-solid fa-users"></i>
+                    <span>Clients</span>
+                    <strong>{{ customerSummaries.length }}</strong>
+                </button>
+            </div>
+
+            <section v-if="activeSection === 'customers' && customerView === 'receivables'" class="card receivables-section">
                 <div class="section-title">
                     <div>
                         <h2>Créances</h2>
                         <p>Montants dus, factures associées, relances et paiements clients.</p>
                     </div>
                     <div class="section-actions">
+                        <button class="btn btn-primary" type="button" @click="openReceivableCreateModal">
+                            <i class="fa-solid fa-plus"></i>Nouvelle créance
+                        </button>
                         <button class="btn btn-light" type="button" @click="showReceivablePrintModal = true">
                             <i class="fa-solid fa-print"></i>Imprimer
                         </button>
@@ -516,14 +532,20 @@
                                 </td>
                                 <td>
                                     <div class="row-actions">
+                                        <button class="table-icon" type="button" @click="openReceivableDetails(receivable)" title="Voir la situation" aria-label="Voir la situation">
+                                            <i class="fa-solid fa-eye"></i>
+                                        </button>
                                         <button class="table-icon" type="button" :disabled="!receivable.remaining" @click="openReceivablePayment(receivable)" title="Ajouter un paiement" aria-label="Ajouter un paiement">
                                             <i class="fa-solid fa-money-bill"></i>
                                         </button>
-                                        <a v-if="receivable.status === 'overdue' && receivable.customer?.phone" class="table-icon whatsapp" :href="receivableWhatsappUrl(receivable)" target="_blank" title="Relancer sur WhatsApp" aria-label="Relancer sur WhatsApp">
+                                        <a v-if="receivable.customer?.phone" class="table-icon whatsapp" :href="receivableWhatsappUrl(receivable)" target="_blank" title="Relancer sur WhatsApp" aria-label="Relancer sur WhatsApp">
                                             <i class="fa-brands fa-whatsapp"></i>
                                         </a>
                                         <button v-else class="table-icon" type="button" disabled title="Relance WhatsApp indisponible" aria-label="Relance WhatsApp indisponible">
                                             <i class="fa-brands fa-whatsapp"></i>
+                                        </button>
+                                        <button class="table-icon danger-icon" type="button" @click="deleteReceivable(receivable)" title="Supprimer la dette" aria-label="Supprimer la dette">
+                                            <i class="fa-solid fa-trash"></i>
                                         </button>
                                     </div>
                                 </td>
@@ -534,48 +556,121 @@
                         </tbody>
                     </table>
                 </div>
+                <div class="table-pagination">
+                    <span>{{ paginationLabel(filteredReceivables.length) }}</span>
+                    <div>
+                        <button type="button" disabled>Précédent</button>
+                        <button type="button" disabled>Suivant</button>
+                    </div>
+                </div>
                 <p v-if="receivableMessage" class="message">{{ receivableMessage }}</p>
             </section>
 
-            <section v-if="activeSection === 'customers'" class="card">
+            <section v-if="activeSection === 'customers' && customerView === 'clients'" class="card">
                 <div class="section-title">
                     <div>
                         <h2>Clients</h2>
                         <p>Fiches clients, achats, factures et situation des comptes.</p>
                     </div>
+                    <div class="section-actions">
+                        <button class="btn btn-primary" type="button" @click="openCustomerCreateModal">
+                            <i class="fa-solid fa-user-plus"></i>Nouveau client
+                        </button>
+                        <button class="btn btn-light" type="button" @click="showCustomerPrintModal = true">
+                            <i class="fa-solid fa-print"></i>Imprimer
+                        </button>
+                    </div>
                 </div>
 
-                <div class="client-cards">
-                    <article v-for="client in customerSummaries" :key="client.key" class="client-card">
-                        <div class="client-card-head">
-                            <div>
-                                <h3>{{ client.name }}</h3>
-                                <p>{{ client.phone || 'Téléphone non renseigné' }}</p>
-                            </div>
-                            <span :class="['status', client.hasDebt ? 'danger' : 'ok']">{{ client.situation }}</span>
-                        </div>
-                        <div class="client-metrics">
-                            <div>
-                                <span>Achats</span>
-                                <strong>{{ formatMoney(client.totalPurchases) }}</strong>
-                            </div>
-                            <div>
-                                <span>Créances</span>
-                                <strong>{{ formatMoney(client.remainingDebt) }}</strong>
-                            </div>
-                        </div>
-                        <div class="invoice-list">
-                            <strong>Factures</strong>
-                            <div v-for="invoice in client.invoices" :key="invoice.id" class="invoice-row">
-                                <a :href="`/businesses/${businessId}/sales/${invoice.id}/invoice`" target="_blank">{{ invoice.number }}</a>
-                                <span>{{ formatMoney(invoice.total) }}</span>
-                                <small>{{ formatDate(invoice.sold_at) }} - {{ paymentLabel(invoice.payment_method) }}</small>
-                                <small v-if="invoice.items.length">{{ invoiceDetails(invoice) }}</small>
-                            </div>
-                            <p v-if="!client.invoices.length" class="empty small-empty">Aucune facture récente.</p>
-                        </div>
-                    </article>
-                    <p v-if="!customerSummaries.length" class="empty">Aucun client enregistré pour le moment.</p>
+                <div class="filters-grid">
+                    <label>Rechercher
+                        <input v-model="customerFilters.search" type="search" placeholder="Nom, téléphone ou facture">
+                    </label>
+                    <label>Situation
+                        <select v-model="customerFilters.situation">
+                            <option value="">Toutes les situations</option>
+                            <option value="debt">Créances en cours</option>
+                            <option value="ok">Client OK</option>
+                        </select>
+                    </label>
+                    <label>Trier par
+                        <select v-model="customerSort">
+                            <option value="name_asc">Client A-Z</option>
+                            <option value="purchases_desc">Achats décroissants</option>
+                            <option value="debt_desc">Créances décroissantes</option>
+                            <option value="invoices_desc">Nombre de factures</option>
+                        </select>
+                    </label>
+                </div>
+
+                <div class="filtered-summary">
+                    <span>{{ customersCountLabel }}</span>
+                    <strong>{{ formatMoney(filteredCustomersTotal) }}</strong>
+                </div>
+
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Client</th>
+                                <th>Téléphone</th>
+                                <th>Achats</th>
+                                <th>Créances</th>
+                                <th>Situation</th>
+                                <th>Factures</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="client in filteredCustomers" :key="client.key">
+                                <td><strong>{{ client.name }}</strong><small>{{ client.email || client.address || '-' }}</small></td>
+                                <td>{{ client.phone || '-' }}</td>
+                                <td>{{ formatMoney(client.totalPurchases) }}</td>
+                                <td>{{ formatMoney(client.remainingDebt) }}</td>
+                                <td><span :class="['status', client.hasDebt ? 'danger' : 'ok']">{{ client.situation }}</span></td>
+                                <td>
+                                    <div class="invoice-cell">
+                                        <div v-for="invoice in client.invoices" :key="invoice.id" class="invoice-mini-row">
+                                            <a :href="`/businesses/${businessId}/sales/${invoice.id}/invoice`" target="_blank">{{ invoice.number }}</a>
+                                            <span>{{ formatMoney(invoice.total) }}</span>
+                                            <small>{{ formatDate(invoice.sold_at) }} - {{ paymentLabel(invoice.payment_method) }}</small>
+                                            <small v-if="invoice.items.length">{{ invoiceDetails(invoice) }}</small>
+                                        </div>
+                                        <span v-if="!client.invoices.length">Aucune facture récente</span>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="row-actions">
+                                        <button class="table-icon" type="button" @click="openCustomerDetails(client)" title="Voir la fiche complète" aria-label="Voir la fiche complète">
+                                            <i class="fa-solid fa-eye"></i>
+                                        </button>
+                                        <a v-if="client.phone" class="table-icon" :href="`tel:${client.phone}`" title="Appeler" aria-label="Appeler">
+                                            <i class="fa-solid fa-phone"></i>
+                                        </a>
+                                        <button v-else class="table-icon" type="button" disabled title="Téléphone indisponible" aria-label="Téléphone indisponible">
+                                            <i class="fa-solid fa-phone"></i>
+                                        </button>
+                                        <a v-if="client.phone" class="table-icon whatsapp" :href="customerWhatsappUrl(client)" target="_blank" title="Contacter sur WhatsApp" aria-label="Contacter sur WhatsApp">
+                                            <i class="fa-brands fa-whatsapp"></i>
+                                        </a>
+                                        <button v-else class="table-icon" type="button" disabled title="WhatsApp indisponible" aria-label="WhatsApp indisponible">
+                                            <i class="fa-brands fa-whatsapp"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr v-if="!filteredCustomers.length">
+                                <td colspan="7" class="empty">Aucun client ne correspond aux filtres.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="table-pagination">
+                    <span>{{ paginationLabel(filteredCustomers.length) }}</span>
+                    <div>
+                        <button type="button" disabled>Précédent</button>
+                        <button type="button" disabled>Suivant</button>
+                    </div>
                 </div>
             </section>
 
@@ -609,6 +704,182 @@
                             </button>
                         </div>
                     </form>
+                </section>
+            </div>
+
+            <div v-if="showReceivableDetailsModal" class="modal-backdrop" @click.self="closeReceivableDetails">
+                <section class="choice-modal">
+                    <div class="section-title">
+                        <div>
+                            <h2 class="large-modal-title">Situation créance</h2>
+                        </div>
+                        <button class="table-icon" type="button" @click="closeReceivableDetails" title="Fermer" aria-label="Fermer">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+                    <div class="receivable-detail-grid">
+                        <div><span>Client</span><strong>{{ selectedReceivableDetails?.customer?.name || 'Client' }}</strong></div>
+                        <div><span>Date de contraction</span><strong>{{ formatDate(selectedReceivableDetails?.created_at) }}</strong></div>
+                        <div><span>Montant initial</span><strong>{{ formatMoney(selectedReceivableDetails?.amount_due || 0) }}</strong></div>
+                        <div><span>Solde dû</span><strong>{{ formatMoney(selectedReceivableDetails?.remaining || 0) }}</strong></div>
+                        <div><span>Échéance</span><strong>{{ formatDateOnly(selectedReceivableDetails?.due_date) }}</strong></div>
+                        <div><span>Statut</span><strong>{{ receivableStatusLabel(selectedReceivableDetails?.status) }}</strong></div>
+                    </div>
+                    <div v-if="selectedReceivableDetails?.notes" class="receivable-notes">
+                        <strong>Note</strong>
+                        <p>{{ selectedReceivableDetails.notes }}</p>
+                    </div>
+                    <div class="payment-history">
+                        <strong>Historique des paiements</strong>
+                        <div v-for="payment in selectedReceivableDetails?.payments || []" :key="payment.id" class="payment-history-row">
+                            <span>{{ formatDate(payment.paid_at) }}</span>
+                            <b>{{ formatMoney(payment.amount) }}</b>
+                            <small>{{ paymentLabel(payment.method) }}{{ payment.reference ? ' - ' + payment.reference : '' }}</small>
+                        </div>
+                        <p v-if="!(selectedReceivableDetails?.payments || []).length" class="empty small-empty">Aucun paiement enregistré.</p>
+                    </div>
+                </section>
+            </div>
+
+            <div v-if="showReceivableCreateModal" class="modal-backdrop" @click.self="showReceivableCreateModal = false">
+                <section class="choice-modal">
+                    <div class="section-title">
+                        <div>
+                            <h2 class="large-modal-title">Nouvelle créance</h2>
+                        </div>
+                        <button class="table-icon" type="button" @click="showReceivableCreateModal = false" title="Fermer" aria-label="Fermer">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+                    <form class="payment-modal-form" @submit.prevent="saveReceivable">
+                        <label>Client existant
+                            <select v-model="receivableForm.customer_id">
+                                <option value="">Nouveau client</option>
+                                <option v-for="customer in customers" :key="customer.id" :value="customer.id">{{ customer.name }} - {{ customer.phone || 'sans téléphone' }}</option>
+                            </select>
+                        </label>
+                        <template v-if="!receivableForm.customer_id">
+                            <label>Nom du client
+                                <input v-model="receivableForm.customer_name" type="text" required placeholder="Nom complet">
+                            </label>
+                            <label>Téléphone
+                                <input v-model="receivableForm.customer_phone" type="tel" placeholder="Ex. 019622860">
+                            </label>
+                        </template>
+                        <label>Montant dû
+                            <input v-model.number="receivableForm.amount_due" type="number" min="1" required>
+                        </label>
+                        <label>Échéance
+                            <input v-model="receivableForm.due_date" type="date">
+                        </label>
+                        <label>Note <span>Optionnel</span>
+                            <textarea v-model="receivableForm.notes" rows="3" placeholder="Ex. Relancer après la livraison"></textarea>
+                        </label>
+                        <div class="choice-actions">
+                            <button class="btn btn-primary" type="button" @click="showReceivableCreateModal = false">
+                                <i class="fa-solid fa-xmark"></i>Annuler
+                            </button>
+                            <button class="btn btn-light" type="submit" :disabled="savingReceivable">
+                                <i class="fa-solid fa-check"></i>{{ savingReceivable ? 'Enregistrement...' : 'Enregistrer' }}
+                            </button>
+                        </div>
+                    </form>
+                </section>
+            </div>
+
+            <div v-if="showCustomerCreateModal" class="modal-backdrop" @click.self="showCustomerCreateModal = false">
+                <section class="choice-modal">
+                    <div class="section-title">
+                        <div>
+                            <h2 class="large-modal-title">Nouveau client</h2>
+                        </div>
+                        <button class="table-icon" type="button" @click="showCustomerCreateModal = false" title="Fermer" aria-label="Fermer">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+                    <form class="payment-modal-form" @submit.prevent="saveCustomer">
+                        <label>Nom
+                            <input v-model="customerForm.name" type="text" required placeholder="Nom complet">
+                        </label>
+                        <label>Téléphone
+                            <input v-model="customerForm.phone" type="tel" placeholder="Ex. 019622860">
+                        </label>
+                        <div class="choice-actions">
+                            <button class="btn btn-primary" type="button" @click="showCustomerCreateModal = false">
+                                <i class="fa-solid fa-xmark"></i>Annuler
+                            </button>
+                            <button class="btn btn-light" type="submit" :disabled="savingCustomer">
+                                <i class="fa-solid fa-check"></i>{{ savingCustomer ? 'Enregistrement...' : 'Enregistrer' }}
+                            </button>
+                        </div>
+                    </form>
+                </section>
+            </div>
+
+            <div v-if="showCustomerPrintModal" class="modal-backdrop" @click.self="showCustomerPrintModal = false">
+                <section class="choice-modal">
+                    <div class="section-title">
+                        <div>
+                            <h2>Imprimer</h2>
+                            <p>Choisissez le format d’impression des clients affichés.</p>
+                        </div>
+                        <button class="table-icon" type="button" @click="showCustomerPrintModal = false" title="Fermer" aria-label="Fermer">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+                    <div class="segmented-actions">
+                        <button class="btn btn-light" type="button" @click="chooseCustomerPrint('pdf')">
+                            <i class="fa-solid fa-file-pdf"></i>PDF
+                        </button>
+                        <button class="btn btn-light" type="button" @click="chooseCustomerPrint('excel')">
+                            <i class="fa-solid fa-file-excel"></i>Excel
+                        </button>
+                    </div>
+                </section>
+            </div>
+
+            <div v-if="showCustomerDetailsModal" class="modal-backdrop" @click.self="closeCustomerDetails">
+                <section class="choice-modal customer-detail-modal">
+                    <div class="section-title">
+                        <div>
+                            <h2 class="large-modal-title">Fiche client</h2>
+                        </div>
+                        <button class="table-icon" type="button" @click="closeCustomerDetails" title="Fermer" aria-label="Fermer">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+                    <div class="receivable-detail-grid">
+                        <div><span>Client</span><strong>{{ selectedCustomerDetails?.name || 'Client' }}</strong></div>
+                        <div><span>Téléphone</span><strong>{{ selectedCustomerDetails?.phone || '-' }}</strong></div>
+                        <div><span>Total achats</span><strong>{{ formatMoney(selectedCustomerDetails?.totalPurchases || 0) }}</strong></div>
+                        <div><span>Créances</span><strong>{{ formatMoney(selectedCustomerDetails?.remainingDebt || 0) }}</strong></div>
+                        <div><span>Situation</span><strong>{{ selectedCustomerDetails?.situation || '-' }}</strong></div>
+                        <div><span>Nombre de factures</span><strong>{{ selectedCustomerDetails?.invoices?.length || 0 }}</strong></div>
+                    </div>
+                    <div class="customer-contact-actions">
+                        <a v-if="selectedCustomerDetails?.phone" class="btn btn-light" :href="`tel:${selectedCustomerDetails.phone}`">
+                            <i class="fa-solid fa-phone"></i>Appeler
+                        </a>
+                        <a v-if="selectedCustomerDetails?.phone" class="btn btn-light" :href="customerWhatsappUrl(selectedCustomerDetails)" target="_blank">
+                            <i class="fa-brands fa-whatsapp"></i>WhatsApp
+                        </a>
+                    </div>
+                    <div class="payment-history">
+                        <strong>Historique des achats et factures</strong>
+                        <div v-for="invoice in selectedCustomerDetails?.invoices || []" :key="invoice.id" class="customer-invoice-detail">
+                            <div>
+                                <a :href="`/businesses/${businessId}/sales/${invoice.id}/invoice`" target="_blank">{{ invoice.number }}</a>
+                                <b>{{ formatMoney(invoice.total) }}</b>
+                                <small>{{ formatDate(invoice.sold_at) }} - {{ paymentLabel(invoice.payment_method) }}</small>
+                            </div>
+                            <ul v-if="invoice.items.length">
+                                <li v-for="item in invoice.items" :key="`${invoice.id}-${item.product_name}`">
+                                    {{ item.product_name }} - {{ Number(item.quantity) }} x {{ formatMoney(item.unit_price) }}
+                                </li>
+                            </ul>
+                        </div>
+                        <p v-if="!(selectedCustomerDetails?.invoices || []).length" class="empty small-empty">Aucune facture récente.</p>
+                    </div>
                 </section>
             </div>
 
@@ -1179,6 +1450,7 @@ const currentUser = ref({});
 const subscription = ref(null);
 const products = ref([]);
 const sales = ref([]);
+const customers = ref([]);
 const receivables = ref([]);
 const supplierDebts = ref([]);
 const expenses = ref([]);
@@ -1217,8 +1489,18 @@ const expenseDateMode = ref('exact');
 const showReceivableDateModal = ref(false);
 const showReceivablePrintModal = ref(false);
 const showReceivablePaymentModal = ref(false);
+const showReceivableDetailsModal = ref(false);
+const showReceivableCreateModal = ref(false);
+const showCustomerCreateModal = ref(false);
+const showCustomerPrintModal = ref(false);
+const showCustomerDetailsModal = ref(false);
 const receivableDateMode = ref('exact');
 const selectedReceivable = ref(null);
+const selectedReceivableDetails = ref(null);
+const selectedCustomerDetails = ref(null);
+const customerView = ref('receivables');
+const savingReceivable = ref(false);
+const savingCustomer = ref(false);
 const employeeMessage = ref('');
 const payrollMessage = ref('');
 const savingEmployee = ref(false);
@@ -1310,6 +1592,20 @@ const saleForm = reactive({
 
 const cart = ref([]);
 
+const customerForm = reactive({
+    name: '',
+    phone: '',
+});
+
+const receivableForm = reactive({
+    customer_id: '',
+    customer_name: '',
+    customer_phone: '',
+    amount_due: '',
+    due_date: '',
+    notes: '',
+});
+
 const supplierDebtForm = reactive({
     supplier_name: '',
     supplier_phone: '',
@@ -1394,6 +1690,11 @@ const receivableDateDraft = reactive({
     endDate: '',
 });
 const receivableSort = ref('due_date_asc');
+const customerFilters = reactive({
+    search: '',
+    situation: '',
+});
+const customerSort = ref('name_asc');
 
 const employeeForm = reactive({
     name: '',
@@ -1518,15 +1819,17 @@ const receivableDateFilterLabel = computed(() => {
     return 'Choisir';
 });
 const customerSummaries = computed(() => {
-    const customers = new Map();
+    const customerRows = new Map();
     const ensureCustomer = (customer, fallbackName = 'Client comptoir') => {
         const key = customer?.id ? `customer-${customer.id}` : `anonymous-${fallbackName}`;
-        if (!customers.has(key)) {
-            customers.set(key, {
+        if (!customerRows.has(key)) {
+            customerRows.set(key, {
                 key,
                 id: customer?.id || null,
                 name: customer?.name || fallbackName,
                 phone: customer?.phone || '',
+                email: customer?.email || '',
+                address: customer?.address || '',
                 totalPurchases: 0,
                 remainingDebt: 0,
                 hasDebt: false,
@@ -1535,8 +1838,12 @@ const customerSummaries = computed(() => {
             });
         }
 
-        return customers.get(key);
+        return customerRows.get(key);
     };
+
+    customers.value.forEach((customer) => {
+        ensureCustomer(customer, customer.name || 'Client');
+    });
 
     sales.value.forEach((sale) => {
         const customer = ensureCustomer(sale.customer, sale.customer?.name || 'Client comptoir');
@@ -1558,13 +1865,47 @@ const customerSummaries = computed(() => {
         customer.hasDebt = customer.hasDebt || remaining > 0;
     });
 
-    return [...customers.values()]
+    return [...customerRows.values()]
         .map((customer) => ({
             ...customer,
             situation: customer.hasDebt ? 'Créances en cours' : 'Client OK',
             invoices: customer.invoices.sort((a, b) => String(b.sold_at || '').localeCompare(String(a.sold_at || ''))),
         }))
         .sort((a, b) => a.name.localeCompare(b.name, 'fr'));
+});
+const filteredCustomers = computed(() => {
+    const term = customerFilters.search.trim().toLowerCase();
+    const rows = customerSummaries.value.filter((customer) => {
+        const matchesSearch = !term
+            || [
+                customer.name,
+                customer.phone,
+                customer.email,
+                customer.address,
+                ...customer.invoices.flatMap((invoice) => [
+                    invoice.number,
+                    invoice.items.map((item) => item.product_name).join(' '),
+                ]),
+            ].some((value) => String(value || '').toLowerCase().includes(term));
+        const matchesSituation = !customerFilters.situation
+            || (customerFilters.situation === 'debt' && customer.hasDebt)
+            || (customerFilters.situation === 'ok' && !customer.hasDebt);
+
+        return matchesSearch && matchesSituation;
+    });
+
+    return [...rows].sort((a, b) => {
+        if (customerSort.value === 'purchases_desc') return Number(b.totalPurchases) - Number(a.totalPurchases);
+        if (customerSort.value === 'debt_desc') return Number(b.remainingDebt) - Number(a.remainingDebt);
+        if (customerSort.value === 'invoices_desc') return b.invoices.length - a.invoices.length;
+        return a.name.localeCompare(b.name, 'fr');
+    });
+});
+const filteredCustomersTotal = computed(() => filteredCustomers.value.reduce((sum, customer) => sum + Number(customer.totalPurchases || 0), 0));
+const filteredCustomersDebtTotal = computed(() => filteredCustomers.value.reduce((sum, customer) => sum + Number(customer.remainingDebt || 0), 0));
+const customersCountLabel = computed(() => {
+    const count = filteredCustomers.value.length;
+    return `${count} client${count >= 2 ? 's' : ''} affiché${count >= 2 ? 's' : ''}`;
 });
 const subscriptionActive = computed(() => {
     if (!['actif', 'active'].includes(subscription.value?.status)) {
@@ -1642,7 +1983,7 @@ async function enhanceTables() {
 
         const wrap = table.closest('.table-wrap');
         if (wrap) {
-            const count = table.querySelectorAll('tbody tr:not(:has(.empty))').length;
+            const count = Array.from(table.querySelectorAll('tbody tr')).filter((row) => !row.querySelector('.empty')).length;
             const existing = wrap.nextElementSibling?.classList?.contains('table-pagination') ? wrap.nextElementSibling : null;
             if (existing) {
                 existing.querySelector('span').textContent = paginationLabel(count);
@@ -1657,7 +1998,7 @@ async function enhanceTables() {
     });
 }
 
-watch([filteredExpenses, filteredReceivables], () => {
+watch([activeSection, customerView, filteredExpenses, filteredReceivables, filteredCustomers], () => {
     enhanceTables();
 }, { flush: 'post' });
 
@@ -1704,9 +2045,15 @@ function normalizeWhatsappPhone(phone) {
 
 function receivableWhatsappUrl(receivable) {
     const phone = normalizeWhatsappPhone(receivable.customer?.phone);
-    const customerName = receivable.customer?.name || 'cher client';
-    const invoice = receivable.invoice?.number ? ` liée à la facture ${receivable.invoice.number}` : '';
-    const message = `Bonjour ${customerName}, votre échéance${invoice} est dépassée. Il reste ${formatMoney(receivable.remaining)} à régler. Merci de passer au paiement.`;
+    const debtDate = formatDateOnly(receivable.created_at);
+    const message = `Cher client, nous vous relancons au sujet de votre dette du ${debtDate}, le solde dû est de ${formatMoney(receivable.remaining)}.`;
+
+    return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+}
+
+function customerWhatsappUrl(customer) {
+    const phone = normalizeWhatsappPhone(customer?.phone);
+    const message = `Bonjour ${customer?.name || 'cher client'}, nous vous contactons depuis EasyMarket.`;
 
     return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
 }
@@ -1786,6 +2133,92 @@ function formatDateOnly(value) {
     return formatDate(value);
 }
 
+function printEscapeHtml(value) {
+    return String(value ?? '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
+}
+
+function businessLogoUrl() {
+    const logoPath = business.value?.logo_path;
+    if (!logoPath || !business.value?.show_logo_on_documents) {
+        return '';
+    }
+
+    if (String(logoPath).startsWith('http') || String(logoPath).startsWith('/')) {
+        return logoPath;
+    }
+
+    return `/storage/${logoPath}`;
+}
+
+function printBusinessHeaderHtml() {
+    const logoUrl = businessLogoUrl();
+    const details = [
+        business.value?.phone ? `Tél. ${business.value.phone}` : '',
+        business.value?.show_address_on_documents && business.value?.address ? business.value.address : '',
+        business.value?.show_ifu_on_documents && business.value?.ifu ? `IFU : ${business.value.ifu}` : '',
+        business.value?.show_slogan_on_documents && business.value?.slogan ? business.value.slogan : '',
+    ].filter(Boolean);
+
+    return `
+        <header class="doc-header">
+            ${logoUrl ? `<img src="${printEscapeHtml(logoUrl)}" alt="Logo">` : '<div class="doc-logo">EM</div>'}
+            <div>
+                <h2>${printEscapeHtml(business.value?.name || 'Boutique')}</h2>
+                ${details.map((item) => `<p>${printEscapeHtml(item)}</p>`).join('')}
+            </div>
+        </header>
+    `;
+}
+
+function printDocumentFooterHtml() {
+    return `<footer class="doc-footer">Document généré avec l'application Easy_Market le ${formatDate(new Date())}</footer>`;
+}
+
+function printDocumentStyles() {
+    return `
+        body{font-family:Poppins,Arial,sans-serif;color:#17211b;padding:24px}
+        .doc-header{display:flex;align-items:center;gap:14px;border-bottom:2px solid #10251f;padding-bottom:14px;margin-bottom:18px}
+        .doc-header img,.doc-logo{width:58px;height:58px;border-radius:10px;object-fit:cover}
+        .doc-logo{display:grid;place-items:center;background:linear-gradient(135deg,#2f7d69,#f5b84b);color:#10251f;font-weight:800}
+        .doc-header h2{margin:0 0 4px;font-size:24px}
+        .doc-header p{margin:1px 0;color:#52635b;font-size:13px}
+        h1{margin:0 0 6px}
+        p{margin:0 0 18px;color:#52635b}
+        table{width:100%;border-collapse:collapse}
+        th,td{border:1px solid #dfe7e2;padding:9px;text-align:left;vertical-align:top}
+        th{background:#10251f;color:white}
+        tfoot td{font-weight:800}
+        .doc-footer{margin-top:22px;padding-top:12px;border-top:1px solid #dfe7e2;color:#52635b;font-size:12px;text-align:center}
+    `;
+}
+
+function writePrintableDocument(printWindow, title, summary, tableHtml) {
+    printWindow.document.write(`
+        <!doctype html>
+        <html lang="fr">
+        <head>
+            <meta charset="utf-8">
+            <title>${printEscapeHtml(title)}</title>
+            <style>${printDocumentStyles()}</style>
+        </head>
+        <body>
+            ${printBusinessHeaderHtml()}
+            <h1>${printEscapeHtml(title)}</h1>
+            <p>${summary}</p>
+            ${tableHtml}
+            ${printDocumentFooterHtml()}
+            <script>window.print();<\/script>
+        </body>
+        </html>
+    `);
+    printWindow.document.close();
+}
+
 async function loadDashboard() {
     dashboardLoaded.value = false;
     const response = await fetch(`/api/businesses/${props.businessId}/dashboard`);
@@ -1815,6 +2248,7 @@ async function loadDashboard() {
     }
     products.value = data.products;
     sales.value = data.sales;
+    customers.value = data.customers || [];
     receivables.value = data.receivables.map((receivable) => ({
         ...receivable,
         payment_amount: receivable.remaining || '',
@@ -2048,6 +2482,85 @@ async function payReceivable(receivable) {
     }
 }
 
+function openReceivableCreateModal() {
+    receivableMessage.value = '';
+    Object.assign(receivableForm, {
+        customer_id: '',
+        customer_name: '',
+        customer_phone: '',
+        amount_due: '',
+        due_date: '',
+        notes: '',
+    });
+    showReceivableCreateModal.value = true;
+}
+
+function openCustomerCreateModal() {
+    receivableMessage.value = '';
+    Object.assign(customerForm, {
+        name: '',
+        phone: '',
+    });
+    showCustomerCreateModal.value = true;
+}
+
+async function saveReceivable() {
+    savingReceivable.value = true;
+    receivableMessage.value = '';
+
+    try {
+        const response = await fetch(`/api/businesses/${props.businessId}/receivables`, {
+            method: 'POST',
+            headers: requestHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify(receivableForm),
+        });
+
+        if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.message || 'Créance invalide.');
+        }
+
+        receivableMessage.value = 'Créance enregistrée.';
+        notifySuccess(receivableMessage.value);
+        showReceivableCreateModal.value = false;
+        await loadDashboard();
+    } catch (error) {
+        receivableMessage.value = error.message;
+        notifyError(receivableMessage.value);
+    } finally {
+        savingReceivable.value = false;
+    }
+}
+
+async function saveCustomer() {
+    savingCustomer.value = true;
+    receivableMessage.value = '';
+
+    try {
+        const response = await fetch(`/api/businesses/${props.businessId}/customers`, {
+            method: 'POST',
+            headers: requestHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify(customerForm),
+        });
+
+        if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.message || 'Client invalide.');
+        }
+
+        receivableMessage.value = 'Client enregistré.';
+        notifySuccess(receivableMessage.value);
+        showCustomerCreateModal.value = false;
+        customerView.value = 'clients';
+        await loadDashboard();
+    } catch (error) {
+        receivableMessage.value = error.message;
+        notifyError(receivableMessage.value);
+    } finally {
+        savingCustomer.value = false;
+    }
+}
+
 function openReceivablePayment(receivable) {
     selectedReceivable.value = receivable;
     selectedReceivable.value.payment_amount = receivable.remaining || '';
@@ -2058,6 +2571,54 @@ function openReceivablePayment(receivable) {
 function closeReceivablePayment() {
     showReceivablePaymentModal.value = false;
     selectedReceivable.value = null;
+}
+
+function openReceivableDetails(receivable) {
+    selectedReceivableDetails.value = receivable;
+    showReceivableDetailsModal.value = true;
+}
+
+function closeReceivableDetails() {
+    showReceivableDetailsModal.value = false;
+    selectedReceivableDetails.value = null;
+}
+
+function openCustomerDetails(customer) {
+    selectedCustomerDetails.value = customer;
+    showCustomerDetailsModal.value = true;
+}
+
+function closeCustomerDetails() {
+    showCustomerDetailsModal.value = false;
+    selectedCustomerDetails.value = null;
+}
+
+async function deleteReceivable(receivable) {
+    const confirmed = window.confirm(`Supprimer la dette de ${receivable.customer?.name || 'ce client'} ?`);
+    if (!confirmed) {
+        return;
+    }
+
+    receivableMessage.value = '';
+
+    try {
+        const response = await fetch(`/api/businesses/${props.businessId}/receivables/${receivable.id}`, {
+            method: 'DELETE',
+            headers: requestHeaders(),
+        });
+
+        if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.message || 'Suppression impossible.');
+        }
+
+        receivableMessage.value = 'Créance supprimée.';
+        notifySuccess(receivableMessage.value);
+        await loadDashboard();
+    } catch (error) {
+        receivableMessage.value = error.message;
+        notifyError(receivableMessage.value);
+    }
 }
 
 function openReceivableDateFilter() {
@@ -2166,35 +2727,96 @@ function printFilteredReceivables() {
         return;
     }
 
-    printWindow.document.write(`
-        <!doctype html>
-        <html lang="fr">
-        <head>
-            <meta charset="utf-8">
-            <title>Créances clients affichées</title>
-            <style>
-                body{font-family:Poppins,Arial,sans-serif;color:#17211b;padding:24px}
-                h1{margin:0 0 6px}
-                p{margin:0 0 18px;color:#52635b}
-                table{width:100%;border-collapse:collapse}
-                th,td{border:1px solid #dfe7e2;padding:9px;text-align:left}
-                th{background:#10251f;color:white}
-                tfoot td{font-weight:800}
-            </style>
-        </head>
-        <body>
-            <h1>Créances clients affichées</h1>
-            <p>Total restant : ${formatMoney(filteredReceivablesTotal.value)}</p>
-            <table>
-                <thead><tr><th>Échéance</th><th>Client</th><th>Téléphone</th><th>Montant dû</th><th>Payé</th><th>Reste</th><th>Statut</th></tr></thead>
-                <tbody>${printableRows}</tbody>
-                <tfoot><tr><td colspan="5">Total restant</td><td colspan="2">${formatMoney(filteredReceivablesTotal.value)}</td></tr></tfoot>
-            </table>
-            <script>window.print();<\/script>
-        </body>
-        </html>
-    `);
-    printWindow.document.close();
+    writePrintableDocument(
+        printWindow,
+        'Créances clients affichées',
+        `Total restant : ${formatMoney(filteredReceivablesTotal.value)}`,
+        `<table>
+            <thead><tr><th>Échéance</th><th>Client</th><th>Téléphone</th><th>Montant dû</th><th>Payé</th><th>Reste</th><th>Statut</th></tr></thead>
+            <tbody>${printableRows}</tbody>
+            <tfoot><tr><td colspan="5">Total restant</td><td colspan="2">${formatMoney(filteredReceivablesTotal.value)}</td></tr></tfoot>
+        </table>`
+    );
+    notifySuccess('Impression PDF lancée.');
+}
+
+function chooseCustomerPrint(format) {
+    showCustomerPrintModal.value = false;
+    if (format === 'excel') {
+        exportFilteredCustomersExcel();
+        return;
+    }
+
+    printFilteredCustomers();
+}
+
+function customerRowsForExport() {
+    return filteredCustomers.value.map((customer) => ({
+        name: customer.name || 'Client',
+        phone: customer.phone || '',
+        totalPurchases: Number(customer.totalPurchases || 0),
+        remainingDebt: Number(customer.remainingDebt || 0),
+        situation: customer.situation || '',
+        invoices: customer.invoices.map((invoice) => `${invoice.number} (${formatMoney(invoice.total)})`).join(', '),
+    }));
+}
+
+function exportFilteredCustomersExcel() {
+    const rows = customerRowsForExport();
+    const escapeHtml = (value) => String(value)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
+    const bodyRows = rows.length
+        ? rows.map((row) => `<tr><td>${escapeHtml(row.name)}</td><td>${escapeHtml(row.phone || '-')}</td><td>${row.totalPurchases}</td><td>${row.remainingDebt}</td><td>${escapeHtml(row.situation)}</td><td>${escapeHtml(row.invoices || '-')}</td></tr>`).join('')
+        : '<tr><td colspan="6">Aucun client affiché.</td></tr>';
+    const html = `
+        <table>
+            <thead><tr><th>Client</th><th>Téléphone</th><th>Achats</th><th>Créances</th><th>Situation</th><th>Factures</th></tr></thead>
+            <tbody>${bodyRows}</tbody>
+            <tfoot><tr><td colspan="2">Totaux</td><td>${filteredCustomersTotal.value}</td><td>${filteredCustomersDebtTotal.value}</td><td colspan="2"></td></tr></tfoot>
+        </table>
+    `;
+    const blob = new Blob([`\uFEFF${html}`], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `clients-${new Date().toISOString().slice(0, 10)}.xls`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+    notifySuccess('Export Excel généré.');
+}
+
+function printFilteredCustomers() {
+    const rows = customerRowsForExport();
+    const escapeHtml = (value) => String(value)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
+    const printableRows = rows.length
+        ? rows.map((row) => `<tr><td>${escapeHtml(row.name)}</td><td>${escapeHtml(row.phone || '-')}</td><td>${formatMoney(row.totalPurchases)}</td><td>${formatMoney(row.remainingDebt)}</td><td>${escapeHtml(row.situation)}</td><td>${escapeHtml(row.invoices || '-')}</td></tr>`).join('')
+        : '<tr><td colspan="6">Aucun client affiché.</td></tr>';
+    const printWindow = window.open('', '_blank');
+
+    if (!printWindow) {
+        receivableMessage.value = 'Impossible d’ouvrir la fenêtre d’impression.';
+        notifyError(receivableMessage.value);
+        return;
+    }
+
+    writePrintableDocument(
+        printWindow,
+        'Clients affichés',
+        `Achats : ${formatMoney(filteredCustomersTotal.value)} - Créances : ${formatMoney(filteredCustomersDebtTotal.value)}`,
+        `<table>
+            <thead><tr><th>Client</th><th>Téléphone</th><th>Achats</th><th>Créances</th><th>Situation</th><th>Factures</th></tr></thead>
+            <tbody>${printableRows}</tbody>
+            <tfoot><tr><td colspan="2">Totaux</td><td>${formatMoney(filteredCustomersTotal.value)}</td><td>${formatMoney(filteredCustomersDebtTotal.value)}</td><td colspan="2"></td></tr></tfoot>
+        </table>`
+    );
     notifySuccess('Impression PDF lancée.');
 }
 
@@ -2368,35 +2990,16 @@ function printFilteredExpenses() {
         return;
     }
 
-    printWindow.document.write(`
-        <!doctype html>
-        <html lang="fr">
-        <head>
-            <meta charset="utf-8">
-            <title>Charges affichées</title>
-            <style>
-                body{font-family:Poppins,Arial,sans-serif;color:#17211b;padding:24px}
-                h1{margin:0 0 6px}
-                p{margin:0 0 18px;color:#52635b}
-                table{width:100%;border-collapse:collapse}
-                th,td{border:1px solid #dfe7e2;padding:9px;text-align:left}
-                th{background:#10251f;color:white}
-                tfoot td{font-weight:800}
-            </style>
-        </head>
-        <body>
-            <h1>Charges affichées</h1>
-            <p>Total : ${formatMoney(filteredExpensesTotal.value)}</p>
-            <table>
-                <thead><tr><th>Date</th><th>Charge</th><th>Catégorie</th><th>Montant</th><th>Notes</th></tr></thead>
-                <tbody>${printableRows}</tbody>
-                <tfoot><tr><td colspan="3">Total</td><td colspan="2">${formatMoney(filteredExpensesTotal.value)}</td></tr></tfoot>
-            </table>
-            <script>window.print();<\/script>
-        </body>
-        </html>
-    `);
-    printWindow.document.close();
+    writePrintableDocument(
+        printWindow,
+        'Charges affichées',
+        `Total : ${formatMoney(filteredExpensesTotal.value)}`,
+        `<table>
+            <thead><tr><th>Date</th><th>Charge</th><th>Catégorie</th><th>Montant</th><th>Notes</th></tr></thead>
+            <tbody>${printableRows}</tbody>
+            <tfoot><tr><td colspan="3">Total</td><td colspan="2">${formatMoney(filteredExpensesTotal.value)}</td></tr></tfoot>
+        </table>`
+    );
     notifySuccess('Impression PDF lancée.');
 }
 

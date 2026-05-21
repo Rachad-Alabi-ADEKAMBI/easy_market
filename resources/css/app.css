@@ -696,6 +696,101 @@ p {
     color: white;
 }
 
+.table-icon.danger-icon {
+    background: #ffe6df;
+    color: #a33824;
+}
+
+.receivable-detail-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.receivable-detail-grid > div {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 10px;
+    display: grid;
+    gap: 4px;
+}
+
+.receivable-detail-grid span,
+.payment-history > strong,
+.receivable-notes > strong {
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.receivable-notes,
+.payment-history {
+    margin-top: 14px;
+    display: grid;
+    gap: 8px;
+}
+
+.receivable-notes p {
+    margin: 0;
+    padding: 10px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    color: var(--ink);
+    background: #fbfefd;
+}
+
+.payment-history-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 3px 10px;
+    padding: 10px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+}
+
+.payment-history-row small {
+    grid-column: 1 / -1;
+    color: var(--muted);
+}
+
+.customer-contact-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 14px;
+}
+
+.customer-invoice-detail {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 10px;
+    display: grid;
+    gap: 8px;
+}
+
+.customer-invoice-detail > div {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 3px 10px;
+}
+
+.customer-invoice-detail a {
+    color: var(--primary-800);
+    font-weight: 800;
+    text-decoration: none;
+}
+
+.customer-invoice-detail small {
+    grid-column: 1 / -1;
+    color: var(--muted);
+}
+
+.customer-invoice-detail ul {
+    margin: 0;
+    padding-left: 18px;
+    color: var(--ink);
+}
+
 .client-cards {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -773,6 +868,36 @@ p {
     grid-column: 1 / -1;
 }
 
+.invoice-cell {
+    display: grid;
+    gap: 8px;
+    min-width: 230px;
+}
+
+.invoice-mini-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 2px 8px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--line);
+}
+
+.invoice-mini-row:last-child {
+    padding-bottom: 0;
+    border-bottom: 0;
+}
+
+.invoice-mini-row a {
+    color: var(--primary-800);
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.invoice-mini-row small {
+    grid-column: 1 / -1;
+    color: var(--muted);
+}
+
 .small-empty {
     padding: 8px 0;
     font-size: 13px;
@@ -792,18 +917,83 @@ p {
 }
 
 .payment-modal-form input,
-.payment-modal-form select {
+.payment-modal-form select,
+.payment-modal-form textarea {
     width: 100%;
     border: 1px solid var(--line);
     border-radius: 8px;
     padding: 11px 12px;
     color: var(--ink);
     background: white;
+    font: inherit;
+}
+
+.payment-modal-form textarea {
+    resize: vertical;
+}
+
+.payment-modal-form label span {
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.large-modal-title {
+    font-size: 27px;
+    line-height: 1.15;
 }
 
 .section-title h2,
 .payment-card h2 {
     margin: 0 0 6px;
+}
+
+.customer-view-switch {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+.customer-switch-card {
+    min-height: 78px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: white;
+    color: var(--ink);
+    padding: 14px;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 4px 10px;
+    align-items: center;
+    text-align: left;
+    box-shadow: 0 10px 28px rgba(16, 37, 31, .05);
+    cursor: pointer;
+}
+
+.customer-switch-card i {
+    grid-row: 1 / span 2;
+    color: var(--primary-700);
+    font-size: 22px;
+}
+
+.customer-switch-card span {
+    color: var(--ink);
+    font-size: 15px;
+    font-weight: 800;
+}
+
+.customer-switch-card strong {
+    font-size: 18px;
+}
+
+.customer-view-switch + .card .section-title h2 {
+    font-weight: 800;
+}
+
+.customer-switch-card.active {
+    border-color: var(--primary-700);
+    background: #f4faf8;
 }
 
 .form-modal .modal-title-block h2 {
@@ -1494,6 +1684,37 @@ td small {
 @media (max-width: 640px) {
     .main {
         padding: 16px;
+    }
+
+    .customer-view-switch {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .customer-switch-card {
+        min-height: 70px;
+        padding: 11px;
+    }
+
+    .customer-switch-card strong {
+        font-size: 15px;
+    }
+
+    .receivables-section .section-actions {
+        width: 100%;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .receivables-section .section-actions .btn {
+        width: 100%;
+        min-width: 0;
+        padding-inline: 8px;
+        font-size: 12px;
+        white-space: nowrap;
+    }
+
+    .receivable-detail-grid {
+        grid-template-columns: 1fr;
     }
 
     .main {

@@ -328,6 +328,7 @@ Route::get('/api/businesses/{business}/dashboard', function (Business $business)
             'address' => $business->address,
             'ifu' => $business->ifu,
             'slogan' => $business->slogan,
+            'logo_path' => $business->logo_path,
             'primary_color' => $business->primary_color,
             'whatsapp_phone' => $business->whatsapp_phone,
             'show_logo_on_documents' => $business->show_logo_on_documents,
@@ -819,6 +820,76 @@ Route::post('/api/businesses/{business}/supplier-debts', function (Request $requ
     return response()->json(enrichSupplierDebt($debt->load('supplier')), 201);
 });
 
+Route::post('/api/businesses/{business}/customers', function (Request $request, Business $business) {
+    authorizeBusinessAccess($business, $request);
+    ensureActiveSubscription($business);
+
+    $validator = Validator::make($request->all(), [
+        'name' => ['required', 'string', 'max:255'],
+        'phone' => ['nullable', 'string', 'max:30'],
+        'email' => ['nullable', 'email', 'max:255'],
+        'address' => ['nullable', 'string', 'max:255'],
+    ]);
+
+    if ($validator->fails()) {
+        return response()->json([
+            'message' => 'Le client est invalide.',
+            'errors' => $validator->errors(),
+        ], 422);
+    }
+
+    $customer = Customer::create([
+        'business_id' => $business->id,
+        'name' => $request->input('name'),
+        'phone' => $request->input('phone'),
+        'email' => $request->input('email'),
+        'address' => $request->input('address'),
+    ]);
+
+    return response()->json($customer, 201);
+});
+
+Route::post('/api/businesses/{business}/receivables', function (Request $request, Business $business) {
+    authorizeBusinessAccess($business, $request);
+    ensureActiveSubscription($business);
+
+    $validator = Validator::make($request->all(), [
+        'customer_id' => ['nullable', 'integer', 'exists:customers,id'],
+        'customer_name' => ['required_without:customer_id', 'nullable', 'string', 'max:255'],
+        'customer_phone' => ['nullable', 'string', 'max:30'],
+        'amount_due' => ['required', 'integer', 'min:1'],
+        'due_date' => ['nullable', 'date'],
+        'notes' => ['nullable', 'string', 'max:1000'],
+    ]);
+
+    if ($validator->fails()) {
+        return response()->json([
+            'message' => 'La créance est invalide.',
+            'errors' => $validator->errors(),
+        ], 422);
+    }
+
+    $customer = $request->filled('customer_id')
+        ? Customer::query()->where('business_id', $business->id)->findOrFail($request->integer('customer_id'))
+        : Customer::create([
+            'business_id' => $business->id,
+            'name' => $request->input('customer_name') ?: 'Client crédit',
+            'phone' => $request->input('customer_phone'),
+        ]);
+
+    $receivable = Receivable::create([
+        'business_id' => $business->id,
+        'customer_id' => $customer->id,
+        'amount_due' => $request->integer('amount_due'),
+        'amount_paid' => 0,
+        'due_date' => $request->input('due_date'),
+        'notes' => $request->input('notes'),
+        'status' => 'current',
+    ]);
+
+    return response()->json(enrichReceivable($receivable->load('customer')), 201);
+});
+
 Route::post('/api/businesses/{business}/supplier-debts/{debt}/payments', function (Request $request, Business $business, SupplierDebt $debt) {
     authorizeBusinessAccess($business, $request);
     abort_unless($debt->business_id === $business->id, 404);
@@ -885,6 +956,7 @@ Route::post('/api/businesses/{business}/receivables/{receivable}/payments', func
 
     Payment::create([
         'business_id' => $business->id,
+        'receivable_id' => $receivable->id,
         'type' => 'receivable',
         'method' => $request->input('method'),
         'amount' => $amount,
@@ -893,6 +965,21 @@ Route::post('/api/businesses/{business}/receivables/{receivable}/payments', func
     ]);
 
     return response()->json(enrichReceivable($receivable->load('customer')));
+});
+
+Route::delete('/api/businesses/{business}/receivables/{receivable}', function (Request $request, Business $business, Receivable $receivable) {
+    authorizeBusinessAccess($business, $request);
+    abort_unless($receivable->business_id === $business->id, 404);
+    ensureActiveSubscription($business);
+
+    Payment::query()
+        ->where('business_id', $business->id)
+        ->where('receivable_id', $receivable->id)
+        ->update(['receivable_id' => null]);
+
+    $receivable->delete();
+
+    return response()->json(['message' => 'Créance supprimée.']);
 });
 
 Route::get('/businesses/{business}/sales/{sale}/invoice', function (Business $business, Sale $sale) {
@@ -1618,8 +1705,20 @@ function enrichReceivable(Receivable $receivable): array
         'amount_paid' => $receivable->amount_paid,
         'remaining' => max(0, $receivable->amount_due - $receivable->amount_paid),
         'due_date' => optional($receivable->due_date)->toDateString(),
+        'created_at' => optional($receivable->created_at)->toISOString(),
+        'notes' => $receivable->notes,
         'status' => $status,
         'invoice' => $invoice,
+        'payments' => $receivable->payments()
+            ->latest('paid_at')
+            ->get(['id', 'amount', 'method', 'reference', 'paid_at'])
+            ->map(fn ($payment) => [
+                'id' => $payment->id,
+                'amount' => $payment->amount,
+                'method' => $payment->method,
+                'reference' => $payment->reference,
+                'paid_at' => optional($payment->paid_at)->toISOString(),
+            ]),
     ];
 }
 
