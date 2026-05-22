@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class SupplierDebt extends Model
 {
-    protected $fillable = ['business_id', 'supplier_id', 'amount_due', 'amount_paid', 'due_date', 'status'];
+    protected $fillable = ['business_id', 'supplier_id', 'amount_due', 'amount_paid', 'due_date', 'notes', 'status'];
 
     protected function casts(): array
     {

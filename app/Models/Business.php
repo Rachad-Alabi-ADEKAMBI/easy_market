@@ -15,6 +15,7 @@ class Business extends Model
         'slogan',
         'logo_path',
         'primary_color',
+        'secondary_color',
         'whatsapp_phone',
         'show_logo_on_documents',
         'show_ifu_on_documents',

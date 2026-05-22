@@ -26,6 +26,31 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Validation\Rule;
 
+function normalizePhoneInput(?string $value): ?string
+{
+    $digits = preg_replace('/\D+/', '', (string) $value);
+
+    if ($digits === '') {
+        return null;
+    }
+
+    if (strlen($digits) === 8) {
+        return '01'.$digits;
+    }
+
+    return $digits;
+}
+
+function requiredPhoneRule(): array
+{
+    return ['required', 'regex:/^01\d{8}$/'];
+}
+
+function nullablePhoneRule(): array
+{
+    return ['nullable', 'regex:/^01\d{8}$/'];
+}
+
 Route::get('/', function () {
     $user = Auth::user();
     $actions = '<a class="btn btn-soft" href="/connexion"><i class="fa-solid fa-right-to-bracket"></i>Connexion</a>'
@@ -173,14 +198,18 @@ Route::post('/deconnexion', function (Request $request) {
 });
 
 Route::post('/inscription', function (Request $request) {
+    $request->merge([
+        'phone' => normalizePhoneInput($request->input('phone')),
+        'business_phone' => normalizePhoneInput($request->input('business_phone')),
+    ]);
+
     $validator = Validator::make($request->all(), [
         'civility' => ['required', 'string', 'max:10'],
-        'name' => ['required', 'string', 'max:255'],
-        'phone' => ['required', 'string', 'max:30'],
+        'phone' => requiredPhoneRule(),
         'login' => ['nullable', 'email', 'max:255'],
         'password' => ['required', 'confirmed', 'min:8'],
         'business_name' => ['required', 'string', 'max:255'],
-        'business_phone' => ['required', 'string', 'max:30'],
+        'business_phone' => requiredPhoneRule(),
         'business_address' => ['nullable', 'string', 'max:255'],
         'business_ifu' => ['nullable', 'string', 'max:255'],
         'business_slogan' => ['nullable', 'string', 'max:255'],
@@ -330,6 +359,7 @@ Route::get('/api/businesses/{business}/dashboard', function (Business $business)
             'slogan' => $business->slogan,
             'logo_path' => $business->logo_path,
             'primary_color' => $business->primary_color,
+            'secondary_color' => $business->secondary_color,
             'whatsapp_phone' => $business->whatsapp_phone,
             'show_logo_on_documents' => $business->show_logo_on_documents,
             'show_ifu_on_documents' => $business->show_ifu_on_documents,
@@ -430,9 +460,13 @@ Route::get('/api/businesses/{business}/dashboard', function (Business $business)
 Route::post('/api/businesses/{business}/subscription-request', function (Request $request, Business $business) {
     authorizeBusinessAccess($business, $request);
 
+    $request->merge([
+        'deposit_phone' => normalizePhoneInput($request->input('deposit_phone')),
+    ]);
+
     $validator = Validator::make($request->all(), [
         'plan' => ['required', 'in:monthly,yearly,lifetime'],
-        'deposit_phone' => ['required', 'string', 'max:30'],
+        'deposit_phone' => requiredPhoneRule(),
     ]);
 
     if ($validator->fails()) {
@@ -578,6 +612,17 @@ Route::post('/admin/utilisateurs/{user}/statut', function (User $user) {
     return redirect('/admin/utilisateurs');
 });
 
+Route::post('/api/businesses/{business}/notifications/read-all', function (Business $business) {
+    authorizeBusinessAccess($business, request());
+
+    AppNotification::query()
+        ->where('business_id', $business->id)
+        ->whereNull('read_at')
+        ->update(['read_at' => now()]);
+
+    return response()->json(['message' => 'Notifications marquées comme lues.']);
+});
+
 Route::post('/api/businesses/{business}/notifications/{notification}/read', function (Business $business, AppNotification $notification) {
     authorizeBusinessAccess($business, request());
     abort_unless($notification->business_id === $business->id, 404);
@@ -590,14 +635,22 @@ Route::post('/api/businesses/{business}/notifications/{notification}/read', func
 Route::post('/api/businesses/{business}/settings', function (Request $request, Business $business) {
     authorizeBusinessAccess($business, $request);
 
+    $request->merge([
+        'phone' => normalizePhoneInput($request->input('phone')),
+        'whatsapp_phone' => normalizePhoneInput($request->input('whatsapp_phone')),
+    ]);
+
     $validator = Validator::make($request->all(), [
         'name' => ['required', 'string', 'max:255'],
-        'phone' => ['required', 'string', 'max:30'],
-        'whatsapp_phone' => ['nullable', 'string', 'max:30'],
+        'phone' => requiredPhoneRule(),
+        'whatsapp_phone' => nullablePhoneRule(),
         'address' => ['nullable', 'string', 'max:255'],
         'ifu' => ['nullable', 'string', 'max:255'],
         'slogan' => ['nullable', 'string', 'max:255'],
+        'logo' => ['nullable', 'image', 'max:2048'],
         'primary_color' => ['nullable', 'regex:/^#[0-9A-Fa-f]{6}$/'],
+        'secondary_color' => ['nullable', 'regex:/^#[0-9A-Fa-f]{6}$/'],
+        'show_logo_on_documents' => ['boolean'],
         'show_ifu_on_documents' => ['boolean'],
         'show_slogan_on_documents' => ['boolean'],
         'show_address_on_documents' => ['boolean'],
@@ -610,18 +663,25 @@ Route::post('/api/businesses/{business}/settings', function (Request $request, B
         ], 422);
     }
 
-    $business->update([
-        'name' => $request->input('name'),
+    $settings = [
         'phone' => $request->input('phone'),
         'whatsapp_phone' => $request->input('whatsapp_phone'),
         'address' => $request->input('address'),
         'ifu' => $request->input('ifu'),
         'slogan' => $request->input('slogan'),
         'primary_color' => $request->input('primary_color') ?: '#2f7d69',
+        'secondary_color' => $request->input('secondary_color') ?: '#f5b84b',
+        'show_logo_on_documents' => $request->boolean('show_logo_on_documents'),
         'show_ifu_on_documents' => $request->boolean('show_ifu_on_documents'),
         'show_slogan_on_documents' => $request->boolean('show_slogan_on_documents'),
         'show_address_on_documents' => $request->boolean('show_address_on_documents'),
-    ]);
+    ];
+
+    if ($request->hasFile('logo')) {
+        $settings['logo_path'] = $request->file('logo')->store('business-logos', 'public');
+    }
+
+    $business->update($settings);
 
     return response()->json($business);
 });
@@ -630,9 +690,13 @@ Route::post('/api/businesses/{business}/employees', function (Request $request, 
     authorizeBusinessAccess($business, $request);
     ensureActiveSubscription($business);
 
+    $request->merge([
+        'phone' => normalizePhoneInput($request->input('phone')),
+    ]);
+
     $validator = Validator::make($request->all(), [
         'name' => ['required', 'string', 'max:255'],
-        'phone' => ['nullable', 'string', 'max:30', Rule::unique('users', 'phone')->whereNotNull('phone')],
+        'phone' => [...nullablePhoneRule(), Rule::unique('users', 'phone')->whereNotNull('phone')],
         'password' => ['nullable', 'string', 'min:8'],
         'position' => ['required', 'string', 'max:255'],
         'type' => ['required', 'in:seller,cashier,accountant,observer'],
@@ -640,7 +704,7 @@ Route::post('/api/businesses/{business}/employees', function (Request $request, 
         'hired_at' => ['nullable', 'date'],
     ]);
 
-    $validator->sometimes('phone', ['required', 'regex:/^01\d{8}$/'], fn ($input) => $input->type === 'seller');
+    $validator->sometimes('phone', requiredPhoneRule(), fn ($input) => $input->type === 'seller');
     $validator->sometimes('password', ['required'], fn ($input) => $input->type === 'seller');
 
     if ($validator->fails()) {
@@ -683,6 +747,41 @@ Route::post('/api/businesses/{business}/employees', function (Request $request, 
     ]);
 
     return response()->json($employee->load('user'), 201);
+});
+
+Route::put('/api/businesses/{business}/employees/{employee}', function (Request $request, Business $business, Employee $employee) {
+    authorizeBusinessAccess($business, $request);
+    abort_unless($employee->business_id === $business->id, 404);
+    ensureActiveSubscription($business);
+
+    $validator = Validator::make($request->all(), [
+        'name' => ['required', 'string', 'max:255'],
+        'position' => ['required', 'string', 'max:255'],
+        'type' => ['required', 'in:seller,cashier,accountant,observer'],
+        'salary' => ['required', 'integer', 'min:0'],
+        'hired_at' => ['nullable', 'date'],
+    ]);
+
+    if ($validator->fails()) {
+        return response()->json([
+            'message' => 'La fiche employé est invalide.',
+            'errors' => $validator->errors(),
+        ], 422);
+    }
+
+    $employee->update([
+        'name' => $request->input('name'),
+        'position' => $request->input('position'),
+        'type' => $request->input('type'),
+        'salary' => $request->integer('salary'),
+        'hired_at' => $request->input('hired_at'),
+    ]);
+
+    if ($employee->user) {
+        $employee->user->update(['name' => $request->input('name')]);
+    }
+
+    return response()->json($employee->fresh('user'));
 });
 
 Route::post('/api/businesses/{business}/employees/{employee}/advances', function (Request $request, Business $business, Employee $employee) {
@@ -812,10 +911,15 @@ Route::post('/api/businesses/{business}/suppliers', function (Request $request, 
     authorizeBusinessAccess($business, $request);
     ensureActiveSubscription($business);
 
+    $request->merge([
+        'phone' => normalizePhoneInput($request->input('phone')),
+    ]);
+
     $validator = Validator::make($request->all(), [
         'name' => ['required', 'string', 'max:255'],
-        'phone' => ['required', 'string', 'max:30'],
+        'phone' => requiredPhoneRule(),
         'payment_terms' => ['nullable', 'string', 'max:255'],
+        'notes' => ['nullable', 'string', 'max:1000'],
     ]);
 
     if ($validator->fails()) {
@@ -833,6 +937,7 @@ Route::post('/api/businesses/{business}/suppliers', function (Request $request, 
         [
             'phone' => $request->input('phone'),
             'payment_terms' => $request->input('payment_terms'),
+            'notes' => $request->input('notes'),
         ]
     );
 
@@ -844,8 +949,12 @@ Route::put('/api/businesses/{business}/suppliers/{supplier}', function (Request 
     abort_unless($supplier->business_id === $business->id, 404);
     ensureActiveSubscription($business);
 
+    $request->merge([
+        'phone' => normalizePhoneInput($request->input('phone')),
+    ]);
+
     $validator = Validator::make($request->all(), [
-        'phone' => ['required', 'string', 'max:30'],
+        'phone' => requiredPhoneRule(),
     ]);
 
     if ($validator->fails()) {
@@ -866,13 +975,17 @@ Route::post('/api/businesses/{business}/supplier-debts', function (Request $requ
     authorizeBusinessAccess($business, $request);
     ensureActiveSubscription($business);
 
+    $request->merge([
+        'supplier_phone' => normalizePhoneInput($request->input('supplier_phone')),
+    ]);
+
     $validator = Validator::make($request->all(), [
         'supplier_id' => ['nullable', 'integer', 'exists:suppliers,id'],
         'supplier_name' => ['required_without:supplier_id', 'nullable', 'string', 'max:255'],
-        'supplier_phone' => ['required_without:supplier_id', 'nullable', 'string', 'max:30'],
-        'payment_terms' => ['nullable', 'string', 'max:255'],
+        'supplier_phone' => ['required_without:supplier_id', ...nullablePhoneRule()],
         'amount_due' => ['required', 'integer', 'min:1'],
         'due_date' => ['nullable', 'date'],
+        'notes' => ['nullable', 'string', 'max:1000'],
     ]);
 
     if ($validator->fails()) {
@@ -891,7 +1004,6 @@ Route::post('/api/businesses/{business}/supplier-debts', function (Request $requ
             ],
             [
                 'phone' => $request->input('supplier_phone'),
-                'payment_terms' => $request->input('payment_terms'),
             ]
         );
 
@@ -901,19 +1013,53 @@ Route::post('/api/businesses/{business}/supplier-debts', function (Request $requ
         'amount_due' => $request->integer('amount_due'),
         'amount_paid' => 0,
         'due_date' => $request->input('due_date'),
+        'notes' => $request->input('notes'),
         'status' => 'current',
     ]);
 
     return response()->json(enrichSupplierDebt($debt->load('supplier')), 201);
 });
 
+Route::put('/api/businesses/{business}/supplier-debts/{debt}', function (Request $request, Business $business, SupplierDebt $debt) {
+    authorizeBusinessAccess($business, $request);
+    abort_unless($debt->business_id === $business->id, 404);
+    ensureActiveSubscription($business);
+
+    $validator = Validator::make($request->all(), [
+        'amount_due' => ['required', 'integer', 'min:1'],
+    ]);
+
+    $validator->after(function ($validator) use ($request, $debt) {
+        if ($request->integer('amount_due') < (int) $debt->amount_paid) {
+            $validator->errors()->add('amount_due', 'Le montant de la dette ne peut pas être inférieur au montant déjà payé.');
+        }
+    });
+
+    if ($validator->fails()) {
+        return response()->json([
+            'message' => 'Le montant de la dette fournisseur est invalide.',
+            'errors' => $validator->errors(),
+        ], 422);
+    }
+
+    $debt->forceFill(['amount_due' => $request->integer('amount_due')]);
+    $debt->status = supplierDebtStatus($debt);
+    $debt->save();
+
+    return response()->json(enrichSupplierDebt($debt->fresh('supplier')));
+});
+
 Route::post('/api/businesses/{business}/customers', function (Request $request, Business $business) {
     authorizeBusinessAccess($business, $request);
     ensureActiveSubscription($business);
 
+    $request->merge([
+        'phone' => normalizePhoneInput($request->input('phone')),
+    ]);
+
     $validator = Validator::make($request->all(), [
         'name' => ['required', 'string', 'max:255'],
-        'phone' => ['nullable', 'string', 'max:30'],
+        'phone' => nullablePhoneRule(),
         'email' => ['nullable', 'email', 'max:255'],
         'address' => ['nullable', 'string', 'max:255'],
     ]);
@@ -940,10 +1086,14 @@ Route::post('/api/businesses/{business}/receivables', function (Request $request
     authorizeBusinessAccess($business, $request);
     ensureActiveSubscription($business);
 
+    $request->merge([
+        'customer_phone' => normalizePhoneInput($request->input('customer_phone')),
+    ]);
+
     $validator = Validator::make($request->all(), [
         'customer_id' => ['nullable', 'integer', 'exists:customers,id'],
         'customer_name' => ['required_without:customer_id', 'nullable', 'string', 'max:255'],
-        'customer_phone' => ['nullable', 'string', 'max:30'],
+        'customer_phone' => nullablePhoneRule(),
         'amount_due' => ['required', 'integer', 'min:1'],
         'due_date' => ['nullable', 'date'],
         'notes' => ['nullable', 'string', 'max:1000'],
@@ -1033,6 +1183,7 @@ Route::post('/api/businesses/{business}/supplier-debts/{debt}/payments', functio
 
     Payment::create([
         'business_id' => $business->id,
+        'supplier_debt_id' => $debt->id,
         'type' => 'supplier_debt',
         'method' => $request->input('method'),
         'amount' => $amount,
@@ -1041,6 +1192,68 @@ Route::post('/api/businesses/{business}/supplier-debts/{debt}/payments', functio
     ]);
 
     return response()->json(enrichSupplierDebt($debt->load('supplier')));
+});
+
+Route::put('/api/businesses/{business}/supplier-debts/{debt}/payments/{payment}', function (Request $request, Business $business, SupplierDebt $debt, Payment $payment) {
+    authorizeBusinessAccess($business, $request);
+    abort_unless($debt->business_id === $business->id, 404);
+    abort_unless($payment->business_id === $business->id && $payment->supplier_debt_id === $debt->id && $payment->type === 'supplier_debt', 404);
+    ensureActiveSubscription($business);
+
+    $validator = Validator::make($request->all(), [
+        'amount' => ['required', 'integer', 'min:1'],
+    ]);
+
+    $otherPaymentsTotal = Payment::query()
+        ->where('business_id', $business->id)
+        ->where('supplier_debt_id', $debt->id)
+        ->where('type', 'supplier_debt')
+        ->whereKeyNot($payment->id)
+        ->sum('amount');
+
+    $validator->after(function ($validator) use ($request, $debt, $otherPaymentsTotal) {
+        if ($request->integer('amount') + $otherPaymentsTotal > (int) $debt->amount_due) {
+            $validator->errors()->add('amount', 'Le total des paiements ne peut pas dépasser le montant de la dette.');
+        }
+    });
+
+    if ($validator->fails()) {
+        return response()->json([
+            'message' => 'Le montant du paiement fournisseur est invalide.',
+            'errors' => $validator->errors(),
+        ], 422);
+    }
+
+    DB::transaction(function () use ($request, $debt, $payment) {
+        $payment->update(['amount' => $request->integer('amount')]);
+
+        $amountPaid = Payment::query()
+            ->where('business_id', $debt->business_id)
+            ->where('supplier_debt_id', $debt->id)
+            ->where('type', 'supplier_debt')
+            ->sum('amount');
+
+        $debt->forceFill(['amount_paid' => $amountPaid]);
+        $debt->status = supplierDebtStatus($debt);
+        $debt->save();
+    });
+
+    return response()->json(enrichSupplierDebt($debt->fresh('supplier')));
+});
+
+Route::delete('/api/businesses/{business}/supplier-debts/{debt}', function (Request $request, Business $business, SupplierDebt $debt) {
+    authorizeBusinessAccess($business, $request);
+    abort_unless($debt->business_id === $business->id, 404);
+    ensureActiveSubscription($business);
+
+    Payment::query()
+        ->where('business_id', $business->id)
+        ->where('supplier_debt_id', $debt->id)
+        ->update(['supplier_debt_id' => null]);
+
+    $debt->delete();
+
+    return response()->json(['message' => 'Dette fournisseur supprimée.']);
 });
 
 Route::post('/api/businesses/{business}/receivables/{receivable}/payments', function (Request $request, Business $business, Receivable $receivable) {
@@ -1318,6 +1531,10 @@ Route::post('/api/businesses/{business}/sales', function (Request $request, Busi
     authorizeBusinessAccess($business, $request);
     ensureActiveSubscription($business);
 
+    $request->merge([
+        'customer_phone' => normalizePhoneInput($request->input('customer_phone')),
+    ]);
+
     $seller = Auth::user();
     $sellerPivot = $seller ? $business->users()->where('users.id', $seller->id)->first()?->pivot : null;
     $canSell = $seller
@@ -1332,7 +1549,7 @@ Route::post('/api/businesses/{business}/sales', function (Request $request, Busi
 
     $validator = Validator::make($request->all(), [
         'customer_name' => ['nullable', 'string', 'max:255'],
-        'customer_phone' => ['nullable', 'string', 'max:30'],
+        'customer_phone' => nullablePhoneRule(),
         'type' => ['nullable', 'in:invoice,proforma'],
         'payment_method' => ['required', 'in:cash,mobile_money,credit'],
         'credit_due_date' => ['nullable', 'date', 'required_if:payment_method,credit'],
@@ -1935,7 +2152,15 @@ function enrichSupplierDebt(SupplierDebt $debt): array
         'amount_paid' => $debt->amount_paid,
         'remaining' => max(0, $debt->amount_due - $debt->amount_paid),
         'due_date' => optional($debt->due_date)->toDateString(),
+        'notes' => $debt->notes,
         'status' => $status,
+        'created_at' => optional($debt->created_at)->toISOString(),
+        'payments' => Payment::query()
+            ->where('business_id', $debt->business_id)
+            ->where('supplier_debt_id', $debt->id)
+            ->where('type', 'supplier_debt')
+            ->latest('paid_at')
+            ->get(),
     ];
 }
 

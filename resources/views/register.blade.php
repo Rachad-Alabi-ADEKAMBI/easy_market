@@ -140,6 +140,29 @@
             color: var(--ink);
             background: white;
         }
+        .phone-field {
+            display: grid;
+            grid-template-columns: 48px minmax(0, 1fr);
+            align-items: center;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: white;
+            overflow: hidden;
+        }
+        .phone-field span {
+            height: 100%;
+            min-height: 42px;
+            display: grid;
+            place-items: center;
+            background: #eef2f0;
+            color: var(--muted);
+            font-weight: 800;
+            border-right: 1px solid var(--line);
+        }
+        .phone-field input {
+            border: 0;
+            border-radius: 0;
+        }
         textarea { min-height: 94px; resize: vertical; }
         .full { grid-column: 1 / -1; }
         .note {
@@ -205,7 +228,7 @@
                             <input name="name" type="text" placeholder="Ex. Aïcha Houngan" required>
                         </label>
                         <label><span class="label-text">Téléphone <span class="required">*</span></span>
-                            <input name="phone" type="tel" placeholder="Ex. 0196228860" required>
+                            <span class="phone-field"><span>01</span><input name="phone" type="tel" inputmode="numeric" maxlength="8" pattern="\d{8}" placeholder="96228860" required></span>
                         </label>
                         <label><span class="label-text">Email</span>
                             <input name="login" type="email" placeholder="vous@exemple.com" autocomplete="username">
@@ -226,7 +249,7 @@
                             <input name="business_name" type="text" placeholder="Ex. Market Plus" required>
                         </label>
                         <label><span class="label-text">Téléphone boutique <span class="required">*</span></span>
-                            <input name="business_phone" type="tel" placeholder="Téléphone professionnel" required>
+                            <span class="phone-field"><span>01</span><input name="business_phone" type="tel" inputmode="numeric" maxlength="8" pattern="\d{8}" placeholder="96228860" required></span>
                         </label>
                         <label><span class="label-text">Adresse</span>
                             <input name="business_address" type="text" placeholder="Quartier, ville">

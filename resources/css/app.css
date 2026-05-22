@@ -134,6 +134,14 @@ a {
     border-radius: 8px;
     background: linear-gradient(135deg, var(--primary-700), var(--gold));
     color: var(--primary-950);
+    overflow: hidden;
+    flex: 0 0 auto;
+}
+
+.logo img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
 }
 
 .side-nav {
@@ -1203,6 +1211,135 @@ p {
     color: var(--ink);
 }
 
+.settings-form .readonly-input {
+    background: #eef2f0;
+    color: var(--muted);
+    cursor: not-allowed;
+}
+
+.phone-field {
+    display: grid;
+    grid-template-columns: 48px minmax(0, 1fr);
+    align-items: center;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: white;
+    overflow: hidden;
+}
+
+.phone-field > span {
+    height: 100%;
+    min-height: 42px;
+    display: grid;
+    place-items: center;
+    background: #eef2f0;
+    color: var(--muted);
+    font-weight: 800;
+    border-right: 1px solid var(--line);
+}
+
+.phone-field input,
+.settings-form .phone-field input,
+.payment-modal-form .phone-field input,
+.sale-form .phone-field input,
+.employee-form .phone-field input {
+    border: 0;
+    border-radius: 0;
+    padding-left: 12px;
+}
+
+.logo-upload-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.logo-preview {
+    width: 58px;
+    height: 58px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: #f8fcfa;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    color: var(--primary-900);
+    font-weight: 800;
+    flex: 0 0 auto;
+}
+
+.logo-preview img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.color-field {
+    display: grid;
+    grid-template-columns: 54px minmax(120px, 180px);
+    gap: 8px;
+    align-items: center;
+}
+
+.settings-form .color-field input[type="color"] {
+    width: 54px;
+    height: 42px;
+    padding: 3px;
+}
+
+.settings-color-panel {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 14px;
+    display: grid;
+    gap: 12px;
+    background: #f8fcfa;
+}
+
+.settings-color-panel strong,
+.settings-color-panel span {
+    display: block;
+}
+
+.settings-color-panel strong {
+    color: var(--primary-900);
+}
+
+.settings-color-panel span {
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.color-suggestions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.color-suggestions button {
+    min-height: 42px;
+    border: 2px solid transparent;
+    border-radius: 8px;
+    padding: 8px 12px;
+    color: white;
+    font-weight: 800;
+    text-shadow: 0 1px 2px rgba(16, 37, 31, .42);
+}
+
+.color-suggestions button.selected {
+    border-color: var(--primary-950);
+    box-shadow: 0 0 0 3px rgba(16, 37, 31, .12);
+}
+
+.color-reset-btn {
+    justify-self: start;
+}
+
+.settings-save-btn {
+    border-color: transparent;
+}
+
 .product-form button,
 .sale-form button,
 .checkout button,
@@ -1229,6 +1366,11 @@ p {
     gap: 12px;
     flex-wrap: wrap;
     padding: 10px 0;
+}
+
+.settings-checks strong {
+    width: 100%;
+    color: var(--primary-900);
 }
 
 .settings-checks label {
@@ -1762,13 +1904,15 @@ td small {
         font-size: 15px;
     }
 
-    .receivables-section .section-actions {
+    .receivables-section .section-actions,
+    .suppliers-section .section-actions {
         width: 100%;
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
-    .receivables-section .section-actions .btn {
+    .receivables-section .section-actions .btn,
+    .suppliers-section .section-actions .btn {
         width: 100%;
         min-width: 0;
         padding-inline: 8px;
