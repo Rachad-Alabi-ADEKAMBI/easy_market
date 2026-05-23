@@ -7,13 +7,18 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800;900&display=swap');
-        :root { --primary:#193b32; --accent:#f5b84b; --ink:#17211b; --muted:#3f5048; --line:#dfe7e2; --paper:#f6faf8; }
+        :root { --primary:__PRIMARY_COLOR__; --accent:__SECONDARY_COLOR__; --ink:#17211b; --muted:#3f5048; --line:#dfe7e2; --paper:#f6faf8; }
         * { box-sizing: border-box; }
         body { margin: 0; background: var(--paper); color: var(--ink); font-family: 'Poppins', Arial, sans-serif; line-height: 1.45; }
         .toolbar { position: sticky; top: 0; background: var(--primary); color: white; padding: 12px 20px; display: flex; justify-content: space-between; gap: 12px; align-items: center; }
         .btn { border: 0; border-radius: 8px; padding: 10px 14px; background: var(--accent); color: white; font-weight: 600; cursor: pointer; display: inline-flex; gap: 8px; align-items: center; }
-        .sheet { width: min(960px, calc(100% - 24px)); margin: 24px auto; background: white; border: 1px solid var(--line); border-radius: 10px; padding: 34px; box-shadow: 0 20px 55px rgba(25,59,50,.12); }
+        .sheet { width: min(960px, calc(100% - 24px)); min-height: calc(100vh - 48px); margin: 24px auto; background: white; border: 1px solid var(--line); border-radius: 10px; padding: 34px; box-shadow: 0 20px 55px rgba(25,59,50,.12); display: flex; flex-direction: column; }
         .head { border-bottom: 2px solid var(--primary); padding-bottom: 18px; display: flex; justify-content: space-between; gap: 20px; }
+        .doc-brand { display: flex; align-items: flex-start; gap: 14px; }
+        .doc-brand img { width: 62px; height: 62px; object-fit: contain; border: 1px solid var(--line); border-radius: 8px; padding: 5px; }
+        .doc-brand h1 { margin-bottom: 6px; }
+        .doc-brand p { margin: 2px 0; }
+        .doc-meta { text-align: right; color: var(--muted); font-weight: 700; }
         h1, h2, p { margin-top: 0; }
         .muted { color: var(--muted); }
         .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 22px 0; }
@@ -23,9 +28,9 @@
         table { width: 100%; border-collapse: collapse; margin-top: 14px; }
         th, td { border-bottom: 1px solid var(--line); padding: 12px 8px; text-align: left; }
         th { color: var(--primary); font-size: 13px; }
-        .footer { margin-top: 34px; color: var(--muted); }
-        @media print { body { background:white; } .toolbar { display:none; } .sheet { width:100%; margin:0; border:0; box-shadow:none; border-radius:0; } }
-        @media (max-width: 720px) { .grid, .head { grid-template-columns: 1fr; display: grid; } }
+        .footer { margin-top: auto; padding-top: 14px; border-top: 1px solid var(--line); color: var(--muted); text-align: center; font-size: 12px; }
+        @media print { body { background:white; } .toolbar { display:none; } .sheet { width:100%; min-height:100vh; margin:0; border:0; box-shadow:none; border-radius:0; } }
+        @media (max-width: 720px) { .grid, .head { grid-template-columns: 1fr; display: grid; } .doc-meta { text-align: left; } }
     </style>
 </head>
 <body>
@@ -35,11 +40,8 @@
     </div>
     <main class="sheet">
         <section class="head">
-            <div>
-                <h1>__BUSINESS__</h1>
-                <p class="muted">__PERIOD_LABEL__ · __RANGE__</p>
-            </div>
-            <strong>EasyMarket</strong>
+            __BUSINESS_HEADER__
+            <div class="doc-meta">__PERIOD_LABEL__<br>__RANGE__</div>
         </section>
         <section class="grid">
             <div class="card"><span>Ventes</span><strong>__SALES_TOTAL__</strong></div>

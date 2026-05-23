@@ -6,13 +6,15 @@ use Illuminate\Database\Eloquent\Model;
 
 class Employee extends Model
 {
-    protected $fillable = ['business_id', 'user_id', 'name', 'position', 'type', 'salary', 'hired_at', 'is_active'];
+    protected $fillable = ['business_id', 'user_id', 'name', 'position', 'type', 'salary', 'salary_payment_date', 'hired_at', 'is_active', 'banned_at', 'ban_reason'];
 
     protected function casts(): array
     {
         return [
+            'salary_payment_date' => 'date',
             'hired_at' => 'date',
             'is_active' => 'boolean',
+            'banned_at' => 'datetime',
         ];
     }
 

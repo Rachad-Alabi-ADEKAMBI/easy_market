@@ -25,17 +25,26 @@
             </a>
             <nav class="side-nav">
                 <a href="/"><i class="fa-solid fa-house"></i>Accueil</a>
-                <a :class="{ active: activeSection === 'expenses' }" :href="sectionUrl('charges')"><i class="fa-solid fa-wallet"></i>Charges</a>
-                <a :class="{ active: activeSection === 'customers' }" :href="sectionUrl('clients')"><i class="fa-solid fa-users"></i>Clients & créances</a>
-                <a :class="{ active: activeSection === 'sales' }" :href="sectionUrl('ventes')"><i class="fa-solid fa-cash-register"></i>Factures & ventes</a>
-                <a :class="{ active: activeSection === 'suppliers' }" :href="sectionUrl('fournisseurs')"><i class="fa-solid fa-truck"></i>Fournisseurs & dettes</a>
-                <a :class="{ active: activeSection === 'taxes' }" :href="sectionUrl('impots')"><i class="fa-solid fa-file-invoice-dollar"></i>Impôts & comptabilité</a>
-                <a :class="{ active: activeSection === 'notifications' }" :href="sectionUrl('notifications')"><i class="fa-solid fa-bell"></i>Notifications{{ unreadNotifications ? ` (${unreadNotifications})` : '' }}</a>
-                <a :class="{ active: activeSection === 'settings' }" :href="sectionUrl('parametres')"><i class="fa-solid fa-gear"></i>Paramètres</a>
-                <a :class="{ active: activeSection === 'employees' }" :href="sectionUrl('personnel')"><i class="fa-solid fa-user-tie"></i>Personnel & paie</a>
-                <a :class="{ active: activeSection === 'reports' }" :href="sectionUrl('rapports')"><i class="fa-solid fa-chart-column"></i>Rapports</a>
-                <a :class="{ active: activeSection === 'stocks' }" :href="sectionUrl('stocks')"><i class="fa-solid fa-boxes-stacked"></i>Stocks</a>
-                <a :class="{ active: activeSection === 'dashboard' }" :href="sectionUrl('tableau-de-bord')"><i class="fa-solid fa-chart-line"></i>Tableau de bord</a>
+                <template v-if="currentUserCanSell">
+                    <a :class="{ active: activeSection === 'seller-cashier' }" :href="sectionUrl('caisse')"><i class="fa-solid fa-cash-register"></i>Caisse</a>
+                    <a :class="{ active: activeSection === 'seller-proforma' }" :href="sectionUrl('proforma')"><i class="fa-solid fa-file-lines"></i>Proforma</a>
+                    <a :class="{ active: activeSection === 'seller-sales' }" :href="sectionUrl('mes-ventes')"><i class="fa-solid fa-receipt"></i>Mes ventes</a>
+                    <a :class="{ active: activeSection === 'seller-products' }" :href="sectionUrl('produits')"><i class="fa-solid fa-boxes-stacked"></i>Produits</a>
+                    <a :class="{ active: activeSection === 'seller-profile' }" :href="sectionUrl('profil')"><i class="fa-solid fa-user-gear"></i>Profil</a>
+                </template>
+                <template v-else>
+                    <a :class="{ active: activeSection === 'expenses' }" :href="sectionUrl('charges')"><i class="fa-solid fa-wallet"></i>Charges</a>
+                    <a :class="{ active: activeSection === 'customers' }" :href="sectionUrl('clients')"><i class="fa-solid fa-users"></i>Clients & créances</a>
+                    <a :class="{ active: activeSection === 'sales' }" :href="sectionUrl('ventes')"><i class="fa-solid fa-cash-register"></i>Factures & ventes</a>
+                    <a :class="{ active: activeSection === 'suppliers' }" :href="sectionUrl('fournisseurs')"><i class="fa-solid fa-truck"></i>Fournisseurs & dettes</a>
+                    <a :class="{ active: activeSection === 'taxes' }" :href="sectionUrl('impots')"><i class="fa-solid fa-file-invoice-dollar"></i>Impôts & comptabilité</a>
+                    <a :class="{ active: activeSection === 'notifications' }" :href="sectionUrl('notifications')"><i class="fa-solid fa-bell"></i>Notifications{{ unreadNotifications ? ` (${unreadNotifications})` : '' }}</a>
+                    <a :class="{ active: activeSection === 'settings' }" :href="sectionUrl('parametres')"><i class="fa-solid fa-gear"></i>Paramètres</a>
+                    <a :class="{ active: activeSection === 'employees' }" :href="sectionUrl('personnel')"><i class="fa-solid fa-user-tie"></i>Personnel & paie</a>
+                    <a :class="{ active: activeSection === 'reports' }" :href="sectionUrl('rapports')"><i class="fa-solid fa-chart-column"></i>Rapports</a>
+                    <a :class="{ active: activeSection === 'stocks' }" :href="sectionUrl('stocks')"><i class="fa-solid fa-boxes-stacked"></i>Stocks</a>
+                    <a :class="{ active: activeSection === 'dashboard' }" :href="sectionUrl('tableau-de-bord')"><i class="fa-solid fa-chart-line"></i>Tableau de bord</a>
+                </template>
             </nav>
             <form class="sidebar-logout" method="post" action="/deconnexion">
                 <input type="hidden" name="_token" :value="csrfToken">
@@ -347,12 +356,12 @@
                 <p v-if="settingsMessage" class="message">{{ settingsMessage }}</p>
             </section>
 
-            <section v-if="activeSection === 'sales' && currentUserCanSell" class="content-grid">
+            <section v-if="sellerCheckoutActive" class="content-grid">
                 <article class="card">
                     <div class="section-title">
                         <div>
-                            <h2>Nouvelle vente</h2>
-                            <p>Sélectionnez un produit, ajoutez-le au panier, puis validez la facture.</p>
+                            <h2>{{ activeSection === 'seller-proforma' ? 'Nouvelle proforma' : 'Nouvelle vente' }}</h2>
+                            <p>{{ activeSection === 'seller-proforma' ? 'Préparez un devis sans mouvement de stock.' : 'Sélectionnez un produit, ajoutez-le au panier, puis validez la facture.' }}</p>
                         </div>
                     </div>
 
@@ -402,12 +411,16 @@
                                 <option value="credit">Crédit</option>
                             </select>
                         </label>
-                        <label>Type de document
+                        <label v-if="activeSection === 'sales'">Type de document
                             <select v-model="saleForm.type">
                                 <option value="invoice">Facture</option>
                                 <option value="proforma">Facture pro forma</option>
                             </select>
                         </label>
+                        <div v-else class="sale-total">
+                            <span>Document</span>
+                            <strong>{{ activeSection === 'seller-proforma' ? 'Facture pro forma' : 'Facture' }}</strong>
+                        </div>
                         <label v-if="saleForm.payment_method === 'credit'">Échéance crédit
                             <input v-model="saleForm.credit_due_date" type="date" required>
                         </label>
@@ -416,7 +429,7 @@
                             <strong>{{ formatMoney(cartTotal) }}</strong>
                         </div>
                         <button class="btn btn-primary" type="submit" :disabled="savingSale || !cart.length">
-                            <i class="fa-solid fa-file-invoice"></i>{{ savingSale ? 'Validation...' : 'Valider la facture' }}
+                            <i class="fa-solid fa-file-invoice"></i>{{ savingSale ? 'Validation...' : sellerCheckoutSubmitLabel }}
                         </button>
                     </form>
 
@@ -503,7 +516,15 @@
                                 <td>{{ product.stock_quantity }}</td>
                                 <td>{{ product.alert_threshold }}</td>
                                 <td>{{ formatMoney(product.purchase_price) }}</td>
-                                <td>{{ formatMoney(product.sale_price) }}</td>
+                                <td>
+                                    <form v-if="currentUser.can_edit_prices" class="inline-price-form" @submit.prevent="updateSellerProductPrice(product)">
+                                        <input v-model.number="productPriceForms[product.id]" type="number" min="0" required>
+                                        <button class="table-icon" type="submit" title="Enregistrer le prix" aria-label="Enregistrer le prix">
+                                            <i class="fa-solid fa-check"></i>
+                                        </button>
+                                    </form>
+                                    <template v-else>{{ formatMoney(product.sale_price) }}</template>
+                                </td>
                                 <td><span :class="['status', isLow(product) ? 'danger' : 'ok']">{{ isLow(product) ? 'Stock bas' : 'OK' }}</span></td>
                             </tr>
                             <tr v-if="!filteredProducts.length">
@@ -588,7 +609,139 @@
                 </section>
             </div>
 
-            <div v-if="activeSection === 'sales'" class="customer-view-switch">
+            <section v-if="activeSection === 'seller-products'" class="card">
+                <div class="section-title">
+                    <div>
+                        <h2>Produits</h2>
+                        <p>Catalogue disponible à la vente, avec les stocks et prix actuels.</p>
+                    </div>
+                </div>
+
+                <div class="filters-grid">
+                    <label>Rechercher
+                        <input v-model="productFilters.search" type="search" placeholder="Produit, catégorie ou unité">
+                    </label>
+                    <label>Catégorie
+                        <select v-model="productFilters.category">
+                            <option value="">Toutes les catégories</option>
+                            <option v-for="category in productCategories" :key="category" :value="category">{{ category }}</option>
+                        </select>
+                    </label>
+                    <label>État
+                        <select v-model="productFilters.status">
+                            <option value="">Tous les états</option>
+                            <option value="low">Stock bas</option>
+                            <option value="ok">OK</option>
+                        </select>
+                    </label>
+                    <label>Trier par
+                        <select v-model="productSort">
+                            <option value="name_asc">Produit A-Z</option>
+                            <option value="stock_asc">Stock croissant</option>
+                            <option value="stock_desc">Stock décroissant</option>
+                            <option value="sale_desc">Prix vente décroissant</option>
+                            <option value="category_asc">Catégorie A-Z</option>
+                        </select>
+                    </label>
+                </div>
+
+                <div class="filtered-summary">
+                    <span>{{ productsCountLabel }}</span>
+                    <strong>{{ currentUser.can_edit_prices ? 'Modification prix autorisée' : 'Lecture seule' }}</strong>
+                </div>
+
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Produit</th>
+                                <th>Catégorie</th>
+                                <th>Stock</th>
+                                <th>Seuil</th>
+                                <th>Prix vente</th>
+                                <th>État</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="product in filteredProducts" :key="product.id">
+                                <td><strong>{{ product.name }}</strong><small>{{ product.unit }}</small></td>
+                                <td>{{ product.category?.name || 'Non classé' }}</td>
+                                <td>{{ product.stock_quantity }}</td>
+                                <td>{{ product.alert_threshold }}</td>
+                                <td>{{ formatMoney(product.sale_price) }}</td>
+                                <td><span :class="['status', isLow(product) ? 'danger' : 'ok']">{{ isLow(product) ? 'Stock bas' : 'OK' }}</span></td>
+                            </tr>
+                            <tr v-if="!filteredProducts.length">
+                                <td colspan="6" class="empty">Aucun produit ne correspond aux filtres.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="table-pagination">
+                    <span>{{ paginationLabel(filteredProducts.length) }}</span>
+                    <div>
+                        <button type="button" disabled>Précédent</button>
+                        <button type="button" disabled>Suivant</button>
+                    </div>
+                </div>
+            </section>
+
+            <section v-if="activeSection === 'seller-profile'" class="card seller-profile-card">
+                <div class="section-title">
+                    <div>
+                        <h2>Profil vendeur</h2>
+                        <p>Gérez vos informations de connexion.</p>
+                    </div>
+                </div>
+                <div class="profile-summary">
+                    <div>
+                        <span>Nom</span>
+                        <strong>{{ currentUser.name || '-' }}</strong>
+                    </div>
+                    <div>
+                        <span>Login</span>
+                        <strong>{{ currentUser.username || currentUser.email || '-' }}</strong>
+                    </div>
+                    <div>
+                        <span>Boutique</span>
+                        <strong>{{ business?.name || '-' }}</strong>
+                    </div>
+                </div>
+                <form class="payment-modal-form profile-password-form" @submit.prevent="changeProfilePassword">
+                    <label>Mot de passe actuel
+                        <span class="password-field">
+                            <input v-model="profilePasswordForm.current_password" :type="showProfileCurrentPassword ? 'text' : 'password'" required autocomplete="current-password">
+                            <button type="button" @click="showProfileCurrentPassword = !showProfileCurrentPassword" :title="showProfileCurrentPassword ? 'Masquer' : 'Afficher'" :aria-label="showProfileCurrentPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'">
+                                <i :class="showProfileCurrentPassword ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye'"></i>
+                            </button>
+                        </span>
+                    </label>
+                    <label>Nouveau mot de passe
+                        <span class="password-field">
+                            <input v-model="profilePasswordForm.password" :type="showProfilePassword ? 'text' : 'password'" required minlength="8" autocomplete="new-password">
+                            <button type="button" @click="showProfilePassword = !showProfilePassword" :title="showProfilePassword ? 'Masquer' : 'Afficher'" :aria-label="showProfilePassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'">
+                                <i :class="showProfilePassword ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye'"></i>
+                            </button>
+                        </span>
+                    </label>
+                    <label>Confirmer le mot de passe
+                        <span class="password-field">
+                            <input v-model="profilePasswordForm.password_confirmation" :type="showProfilePasswordConfirmation ? 'text' : 'password'" required minlength="8" autocomplete="new-password">
+                            <button type="button" @click="showProfilePasswordConfirmation = !showProfilePasswordConfirmation" :title="showProfilePasswordConfirmation ? 'Masquer' : 'Afficher'" :aria-label="showProfilePasswordConfirmation ? 'Masquer le mot de passe' : 'Afficher le mot de passe'">
+                                <i :class="showProfilePasswordConfirmation ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye'"></i>
+                            </button>
+                        </span>
+                    </label>
+                    <div class="choice-actions full">
+                        <button class="btn btn-primary" type="submit" :disabled="savingProfilePassword">
+                            <i class="fa-solid fa-key"></i>{{ savingProfilePassword ? 'Modification...' : 'Modifier le mot de passe' }}
+                        </button>
+                    </div>
+                </form>
+                <p v-if="profileMessage" class="message">{{ profileMessage }}</p>
+            </section>
+
+            <div v-if="activeSection === 'sales' && !currentUserCanSell" class="customer-view-switch">
                 <button :class="['customer-switch-card', salesView === 'invoices' ? 'active' : '']" type="button" @click="salesView = 'invoices'">
                     <i class="fa-solid fa-receipt"></i>
                     <span>Ventes</span>
@@ -601,11 +754,11 @@
                 </button>
             </div>
 
-            <section v-if="activeSection === 'sales'" class="card">
+            <section v-if="salesHistoryActive" class="card">
                 <div class="section-title">
                     <div>
-                        <h2>{{ salesView === 'proformas' ? 'Factures Pro forma' : 'Factures & ventes' }}</h2>
-                        <p>{{ salesView === 'proformas' ? 'Suivez les pro formas établies avant validation de vente.' : 'Suivez toutes les ventes effectuées par vos vendeurs.' }}</p>
+                        <h2>{{ sellerSalesTitle }}</h2>
+                        <p>{{ currentUserCanSell ? 'Consultez uniquement les documents que vous avez créés.' : (salesView === 'proformas' ? 'Suivez les pro formas établies avant validation de vente.' : 'Suivez toutes les ventes effectuées par vos vendeurs.') }}</p>
                     </div>
                     <div class="section-actions">
                         <button class="btn btn-light" type="button" @click="showSalesPrintModal = true">
@@ -616,9 +769,9 @@
 
                 <div class="filters-grid">
                     <label>Rechercher
-                        <input v-model="salesFilters.search" type="search" placeholder="Facture, vendeur, client">
+                        <input v-model="salesFilters.search" type="search" :placeholder="currentUserCanSell ? 'Facture ou client' : 'Facture, vendeur, client'">
                     </label>
-                    <label v-if="salesView !== 'proformas'">Paiement
+                    <label v-if="salesView !== 'proformas' && activeSection !== 'seller-proforma'">Paiement
                         <select v-model="salesFilters.payment">
                             <option value="">Tous les paiements</option>
                             <option value="cash">Espèces</option>
@@ -655,7 +808,7 @@
                             <tr>
                                 <th>Date</th>
                                 <th>Facture</th>
-                                <th>Vendeur</th>
+                                <th v-if="!currentUserCanSell">Vendeur</th>
                                 <th>Client</th>
                                 <th v-if="salesView !== 'proformas'">Paiement</th>
                                 <th v-if="salesView !== 'proformas'">Statut</th>
@@ -667,7 +820,7 @@
                             <tr v-for="sale in displayedSalesRows" :key="sale.id">
                                 <td>{{ formatDate(sale.sold_at) }}</td>
                                 <td><strong>{{ sale.number }}</strong><small>{{ sale.items.length }} ligne(s)</small></td>
-                                <td><strong>{{ sale.seller?.name || 'Vendeur' }}</strong><small>{{ sale.seller?.phone || '-' }}</small></td>
+                                <td v-if="!currentUserCanSell"><strong>{{ sale.seller?.name || 'Vendeur' }}</strong><small>{{ sale.seller?.phone || '-' }}</small></td>
                                 <td>{{ sale.customer?.name || 'Client comptoir' }}</td>
                                 <td v-if="salesView !== 'proformas'">{{ paymentLabel(sale.payment_method) }}</td>
                                 <td v-if="salesView !== 'proformas'"><span class="status ok">{{ sale.status }}</span></td>
@@ -675,7 +828,7 @@
                                 <td><a class="table-icon" :href="`/businesses/${businessId}/sales/${sale.id}/invoice`" target="_blank" title="Voir la facture" aria-label="Voir la facture"><i class="fa-solid fa-file-invoice"></i></a></td>
                             </tr>
                             <tr v-if="!displayedSalesRows.length">
-                                <td :colspan="salesView === 'proformas' ? 6 : 8" class="empty">{{ salesView === 'proformas' ? 'Aucune facture pro forma ne correspond aux filtres.' : 'Aucune vente ne correspond aux filtres.' }}</td>
+                                <td :colspan="salesEmptyColspan" class="empty">{{ salesView === 'proformas' || activeSection === 'seller-proforma' ? 'Aucune facture pro forma ne correspond aux filtres.' : 'Aucune vente ne correspond aux filtres.' }}</td>
                             </tr>
                         </tbody>
                     </table>
@@ -1012,8 +1165,8 @@
                             <button class="btn btn-light" type="button" @click="closeReceivablePayment">
                                 <i class="fa-solid fa-xmark"></i>Annuler
                             </button>
-                            <button class="btn btn-primary" type="submit">
-                                <i class="fa-solid fa-check"></i>Enregistrer
+                            <button class="btn btn-primary" type="submit" :disabled="savingAdvance">
+                                <i class="fa-solid fa-check"></i>{{ savingAdvance ? 'Enregistrement...' : 'Enregistrer' }}
                             </button>
                         </div>
                     </form>
@@ -1266,6 +1419,17 @@
                         <a v-if="selectedCustomerDetails?.phone" class="btn btn-light" :href="customerWhatsappUrl(selectedCustomerDetails)" target="_blank">
                             <i class="fa-brands fa-whatsapp"></i>WhatsApp
                         </a>
+                    </div>
+                    <div class="payment-history">
+                        <strong>Avances / créances en cours</strong>
+                        <div v-for="receivable in selectedCustomerDetails?.receivables || []" :key="receivable.id" class="customer-invoice-detail">
+                            <div>
+                                <b>{{ formatMoney(receivable.remaining || 0) }}</b>
+                                <small>Initial : {{ formatMoney(receivable.amount_due || 0) }} - Payé : {{ formatMoney(receivable.amount_paid || 0) }}</small>
+                                <small>Échéance : {{ formatDateOnly(receivable.due_date) }} - {{ receivableStatusLabel(receivable.status) }}</small>
+                            </div>
+                        </div>
+                        <p v-if="!(selectedCustomerDetails?.receivables || []).length" class="empty small-empty">Aucune avance en cours.</p>
                     </div>
                     <div class="payment-history">
                         <strong>Historique des achats et factures</strong>
@@ -2175,10 +2339,7 @@
                     <label>Type
                         <select v-model="employeeFilters.type">
                             <option value="">Tous les types</option>
-                            <option value="seller">Vendeur</option>
-                            <option value="cashier">Caissier</option>
-                            <option value="accountant">Comptable</option>
-                            <option value="observer">Observateur</option>
+                            <option v-for="type in employeeTypeOptions" :key="type.value" :value="type.value">{{ type.label }}</option>
                         </select>
                     </label>
                     <label>Trier par
@@ -2194,7 +2355,6 @@
 
                 <div class="filtered-summary">
                     <span>{{ employeesCountLabel }}</span>
-                    <strong>{{ formatMoney(filteredEmployeesSalaryTotal) }}</strong>
                 </div>
 
                 <div class="table-wrap">
@@ -2202,35 +2362,32 @@
                         <thead>
                             <tr>
                                 <th>Employé</th>
-                                <th>Poste</th>
                                 <th>Type</th>
                                 <th>Salaire</th>
-                                <th>Embauche</th>
-                                <th>Avances récentes</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
                             <tr v-for="employee in filteredEmployees" :key="employee.id">
-                                <td><strong>{{ employee.name }}</strong><small v-if="employee.user?.phone">Connexion: {{ employee.user.phone }}</small></td>
-                                <td>{{ employee.position }}</td>
+                                <td><strong>{{ employee.name }}</strong></td>
                                 <td><span class="status ok">{{ employeeTypeLabel(employee.type) }}</span></td>
                                 <td>{{ formatMoney(employee.salary) }}</td>
-                                <td>{{ formatDateOnly(employee.hired_at) }}</td>
-                                <td>{{ formatMoney((employee.advances || []).reduce((sum, item) => sum + Number(item.amount), 0)) }}</td>
                                 <td>
                                     <div class="row-actions">
-                                        <button class="table-icon" type="button" @click="openAdvanceModal(employee)" title="Ajouter une avance" aria-label="Ajouter une avance">
-                                            <i class="fa-solid fa-hand-holding-dollar"></i>
+                                        <button class="table-icon" type="button" @click="openEmployeeDetails(employee)" title="Voir la fiche" aria-label="Voir la fiche">
+                                            <i class="fa-solid fa-eye"></i>
                                         </button>
                                         <button class="table-icon" type="button" @click="openEmployeeModal(employee)" title="Modifier" aria-label="Modifier">
                                             <i class="fa-solid fa-pen-to-square"></i>
+                                        </button>
+                                        <button class="table-icon danger-icon" type="button" @click="openEmployeeBanModal(employee)" title="Bannir" aria-label="Bannir">
+                                            <i class="fa-solid fa-user-slash"></i>
                                         </button>
                                     </div>
                                 </td>
                             </tr>
                             <tr v-if="!filteredEmployees.length">
-                                <td colspan="7" class="empty">Aucun employé ne correspond aux filtres.</td>
+                                <td colspan="4" class="empty">Aucun employé ne correspond aux filtres.</td>
                             </tr>
                         </tbody>
                     </table>
@@ -2251,8 +2408,11 @@
                         <h2>Paie</h2>
                     </div>
                     <div class="section-actions">
-                        <button class="btn btn-primary" type="button" @click="openPayrollModal">
-                            <i class="fa-solid fa-file-invoice-dollar"></i>Calculer paie
+                        <button v-if="payrollSubView === 'payrolls'" class="btn btn-primary" type="button" @click="openPayrollModal">
+                            <i class="fa-solid fa-file-invoice-dollar"></i>Nouveau salaire
+                        </button>
+                        <button v-if="payrollSubView === 'advances'" class="btn btn-advance" type="button" @click="openAdvanceModal()">
+                            <i class="fa-solid fa-hand-holding-dollar"></i>Nouvelle avance
                         </button>
                         <button class="btn btn-light" type="button" @click="showPayrollPrintModal = true">
                             <i class="fa-solid fa-print"></i>Imprimer
@@ -2260,6 +2420,20 @@
                     </div>
                 </div>
 
+                <div class="payroll-subsection-switch">
+                    <button :class="['customer-switch-card', payrollSubView === 'payrolls' ? 'active' : '']" type="button" @click="payrollSubView = 'payrolls'">
+                        <i class="fa-solid fa-file-invoice-dollar"></i>
+                        <span>Paies</span>
+                        <strong>{{ payrollsCountLabel }}</strong>
+                    </button>
+                    <button :class="['customer-switch-card', payrollSubView === 'advances' ? 'active' : '']" type="button" @click="payrollSubView = 'advances'">
+                        <i class="fa-solid fa-hand-holding-dollar"></i>
+                        <span>Avances</span>
+                        <strong>{{ formatMoney(filteredAdvancesTotal) }}</strong>
+                    </button>
+                </div>
+
+                <template v-if="payrollSubView === 'payrolls'">
                 <div class="filters-grid">
                     <label>Rechercher
                         <input v-model="payrollFilters.search" type="search" placeholder="Employé ou période">
@@ -2321,48 +2495,163 @@
                     </div>
                 </div>
                 <p v-if="payrollMessage" class="message">{{ payrollMessage }}</p>
+                </template>
+
+                <template v-else>
+                <div class="filters-grid">
+                    <label>Rechercher
+                        <input v-model="advanceFilters.search" type="search" placeholder="Employé, montant ou note">
+                    </label>
+                    <label>Trier par
+                        <select v-model="advanceSort">
+                            <option value="date_desc">Date récente</option>
+                            <option value="date_asc">Date ancienne</option>
+                            <option value="amount_desc">Montant décroissant</option>
+                            <option value="employee_asc">Employé A-Z</option>
+                        </select>
+                    </label>
+                </div>
+
+                <div class="filtered-summary">
+                    <span>{{ advancesCountLabel }}</span>
+                    <strong>{{ formatMoney(filteredAdvancesTotal) }}</strong>
+                </div>
+
+                <div class="table-wrap advances-table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th><i class="fa-solid fa-calendar-day"></i>Date</th>
+                                <th><i class="fa-solid fa-user-tie"></i>Employé</th>
+                                <th><i class="fa-solid fa-money-bill-wave"></i>Montant</th>
+                                <th><i class="fa-solid fa-note-sticky"></i>Note</th>
+                                <th><i class="fa-solid fa-screwdriver-wrench"></i>Options</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="advance in filteredAdvances" :key="advance.id">
+                                <td data-label="Date">
+                                    <span class="advance-date-pill"><i class="fa-solid fa-calendar-check"></i>{{ formatDateOnly(advance.advanced_on) }}</span>
+                                </td>
+                                <td data-label="Employé">
+                                    <span class="advance-employee-cell">
+                                        <span class="advance-avatar"><i class="fa-solid fa-user"></i></span>
+                                        <strong>{{ advance.employee?.name || '-' }}</strong>
+                                    </span>
+                                </td>
+                                <td data-label="Montant">
+                                    <span class="advance-amount-pill"><i class="fa-solid fa-coins"></i>{{ formatMoney(advance.amount) }}</span>
+                                </td>
+                                <td data-label="Note">
+                                    <span :class="['advance-note-cell', advance.notes ? '' : 'muted']">
+                                        <i class="fa-solid fa-comment-dots"></i>{{ advance.notes || 'Aucune note' }}
+                                    </span>
+                                </td>
+                                <td data-label="Options">
+                                    <div class="row-actions">
+                                        <button class="table-icon" type="button" @click="openAdvanceEdit(advance)" title="Modifier" aria-label="Modifier">
+                                            <i class="fa-solid fa-pen-to-square"></i>
+                                        </button>
+                                        <button class="table-icon danger-icon" type="button" @click="deleteAdvance(advance)" title="Supprimer" aria-label="Supprimer">
+                                            <i class="fa-solid fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr v-if="!filteredAdvances.length">
+                                <td colspan="5" class="empty">Aucune avance ne correspond aux filtres.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="table-pagination">
+                    <span>{{ paginationLabel(filteredAdvances.length) }}</span>
+                    <div>
+                        <button type="button" disabled>Précédent</button>
+                        <button type="button" disabled>Suivant</button>
+                    </div>
+                </div>
+                <p v-if="payrollMessage" class="message">{{ payrollMessage }}</p>
+                </template>
             </section>
 
             <div v-if="showEmployeeModal" class="modal-backdrop" @click.self="closeEmployeeModal">
                 <section class="form-modal">
                     <div class="section-title">
                         <div>
-                            <h2>{{ editingEmployee ? 'Modifier employé' : 'Nouvel employé' }}</h2>
+                            <h2 class="employee-modal-title">
+                                <i class="fa-solid fa-user-tie"></i>{{ editingEmployee ? 'Modifier employé' : 'Nouvel employé' }}
+                            </h2>
+                            <p class="employee-modal-subtitle">Renseignez les détails de l'employé. Seuls les vendeurs ont besoin d'un mot de passe pour se connecter et effectuer des ventes.</p>
                         </div>
-                        <button class="table-icon" type="button" @click="closeEmployeeModal" title="Fermer" aria-label="Fermer">
+                        <button class="table-icon modal-close" type="button" @click="closeEmployeeModal" title="Fermer" aria-label="Fermer">
                             <i class="fa-solid fa-xmark"></i>
                         </button>
                     </div>
                     <form class="employee-form" @submit.prevent="saveEmployee">
-                        <label>Nom
-                            <input v-model="employeeForm.name" type="text" required placeholder="Nom complet">
-                        </label>
-                        <label>Poste
-                            <input v-model="employeeForm.position" type="text" required placeholder="Ex. Vendeur">
-                        </label>
-                        <label>Type
-                            <select v-model="employeeForm.type" required>
-                                <option value="seller">Vendeur</option>
-                                <option value="cashier">Caissier</option>
-                                <option value="accountant">Comptable</option>
-                                <option value="observer">Observateur</option>
-                            </select>
-                        </label>
-                        <label v-if="employeeForm.type === 'seller' && !editingEmployee">Téléphone de connexion
-                            <span class="phone-field">
-                                <span>01</span>
-                                <input :value="phoneInputValue(employeeForm.phone)" type="tel" required inputmode="numeric" maxlength="8" pattern="\d{8}" placeholder="96228860" @input="employeeForm.phone = phoneWithPrefix($event.target.value)">
-                            </span>
-                        </label>
-                        <label v-if="employeeForm.type === 'seller' && !editingEmployee">Mot de passe
-                            <input v-model="employeeForm.password" type="password" required minlength="8" placeholder="8 caractères minimum">
-                        </label>
-                        <label>Salaire mensuel
-                            <input v-model.number="employeeForm.salary" type="number" required min="0">
-                        </label>
-                        <label>Date d'embauche
-                            <input v-model="employeeForm.hired_at" type="date">
-                        </label>
+                        <div class="employee-info-section full">
+                            <h3><i class="fa-solid fa-id-card"></i>Informations générales</h3>
+                            <div class="employee-login-grid">
+                                <label><span class="field-label"><i class="fa-solid fa-user"></i>Noms et prénoms</span>
+                                    <span class="input-icon-field">
+                                        <i class="fa-solid fa-user"></i>
+                                        <input v-model="employeeForm.name" type="text" required placeholder="Nom complet">
+                                    </span>
+                                </label>
+                                <label><span class="field-label"><i class="fa-solid fa-briefcase"></i>Type de compte</span>
+                                    <span class="input-icon-field">
+                                        <i class="fa-solid fa-briefcase"></i>
+                                        <select v-model="employeeForm.type" required>
+                                            <option v-for="type in employeeTypeOptions" :key="type.value" :value="type.value">{{ type.label }}</option>
+                                            <option value="__other">Autre</option>
+                                        </select>
+                                    </span>
+                                </label>
+                                <label v-if="employeeForm.type === '__other'"><span class="field-label"><i class="fa-solid fa-pen-to-square"></i>Type de compte</span>
+                                    <span class="input-icon-field">
+                                        <i class="fa-solid fa-pen-to-square"></i>
+                                        <input v-model="employeeForm.custom_type" type="text" required placeholder="Ex. Magasinier">
+                                    </span>
+                                </label>
+                                <label v-if="employeeFormIsSeller"><span class="field-label"><i class="fa-solid fa-phone"></i>Téléphone</span>
+                                    <span class="phone-field">
+                                        <span>01</span>
+                                        <input :value="phoneInputValue(employeeForm.phone)" type="tel" required inputmode="numeric" maxlength="8" pattern="\d{8}" placeholder="96228860" @input="employeeForm.phone = phoneWithPrefix($event.target.value)">
+                                    </span>
+                                </label>
+                                <label><span class="field-label"><i class="fa-solid fa-money-bill-wave"></i>Salaire mensuel</span>
+                                    <span class="input-icon-field">
+                                        <i class="fa-solid fa-money-bill-wave"></i>
+                                        <input v-model.number="employeeForm.salary" type="number" required min="0">
+                                    </span>
+                                </label>
+                                <label><span class="field-label"><i class="fa-solid fa-calendar-day"></i>Date d'embauche</span>
+                                    <span class="input-icon-field">
+                                        <i class="fa-solid fa-calendar-day"></i>
+                                        <input v-model="employeeForm.hired_at" type="date">
+                                    </span>
+                                </label>
+                            </div>
+                        </div>
+                        <div v-if="employeeFormIsSeller" class="employee-info-section full">
+                            <h3><i class="fa-solid fa-shield-halved"></i>Informations de connexion</h3>
+                            <div class="employee-login-grid">
+                                <label><span class="field-label"><i class="fa-solid fa-circle-user"></i>Nom d'utilisateur</span>
+                                    <span class="input-icon-field">
+                                        <i class="fa-solid fa-circle-user"></i>
+                                        <input v-model="employeeForm.username" type="text" required autocomplete="username" placeholder="ex. vendeur1">
+                                    </span>
+                                </label>
+                                <label v-if="!editingEmployee"><span class="field-label"><i class="fa-solid fa-lock"></i>Mot de passe</span>
+                                    <span class="password-field">
+                                        <input v-model="employeeForm.password" :type="employeePasswordVisible ? 'text' : 'password'" required minlength="8" placeholder="8 caractères minimum" autocomplete="new-password">
+                                        <button type="button" @click="employeePasswordVisible = !employeePasswordVisible" :title="employeePasswordVisible ? 'Masquer le mot de passe' : 'Afficher le mot de passe'" :aria-label="employeePasswordVisible ? 'Masquer le mot de passe' : 'Afficher le mot de passe'">
+                                            <i :class="employeePasswordVisible ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye'"></i>
+                                        </button>
+                                    </span>
+                                </label>
+                            </div>
+                        </div>
                         <div class="choice-actions full">
                             <button class="btn btn-light" type="button" @click="closeEmployeeModal">
                                 <i class="fa-solid fa-xmark"></i>Annuler
@@ -2375,18 +2664,61 @@
                 </section>
             </div>
 
-            <div v-if="showAdvanceModal" class="modal-backdrop" @click.self="showAdvanceModal = false">
+            <div v-if="showEmployeeDetailsModal" class="modal-backdrop" @click.self="closeEmployeeDetails">
+                <section class="choice-modal customer-detail-modal">
+                    <div class="section-title">
+                        <div>
+                            <h2>Fiche employé</h2>
+                            <p>{{ selectedEmployeeDetails?.name || 'Employé' }}</p>
+                        </div>
+                        <button class="table-icon" type="button" @click="closeEmployeeDetails" title="Fermer" aria-label="Fermer">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+                    <div class="receivable-detail-grid">
+                        <div><span>Nom</span><strong>{{ selectedEmployeeDetails?.name || '-' }}</strong></div>
+                        <div><span>Téléphone</span><strong>{{ selectedEmployeeDetails?.user?.phone || '-' }}</strong></div>
+                        <div><span>Nom d'utilisateur</span><strong>{{ selectedEmployeeDetails?.user?.username || '-' }}</strong></div>
+                        <div><span>Poste</span><strong>{{ selectedEmployeeDetails?.position || '-' }}</strong></div>
+                        <div><span>Type de compte</span><strong>{{ employeeTypeLabel(selectedEmployeeDetails?.type) }}</strong></div>
+                        <div><span>Salaire mensuel</span><strong>{{ formatMoney(selectedEmployeeDetails?.salary || 0) }}</strong></div>
+                        <div><span>Paiement salaire habituel</span><strong>{{ formatDayMonth(selectedEmployeeDetails?.salary_payment_date) }}</strong></div>
+                        <div><span>Date d'embauche</span><strong>{{ formatDateOnly(selectedEmployeeDetails?.hired_at) }}</strong></div>
+                        <div><span>Statut</span><strong>{{ selectedEmployeeDetails?.is_active ? 'Actif' : 'Inactif' }}</strong></div>
+                    </div>
+                    <div v-if="selectedEmployeeDetails?.ban_reason" class="receivable-notes">
+                        <strong>Motif du bannissement</strong>
+                        <p>{{ selectedEmployeeDetails.ban_reason }}</p>
+                    </div>
+                    <div class="choice-actions">
+                        <button class="btn btn-light" type="button" @click="closeEmployeeDetails">
+                            <i class="fa-solid fa-xmark"></i>Fermer
+                        </button>
+                        <button class="btn btn-primary" type="button" @click="openEmployeeModal(selectedEmployeeDetails); closeEmployeeDetails()">
+                            <i class="fa-solid fa-pen-to-square"></i>Modifier
+                        </button>
+                    </div>
+                </section>
+            </div>
+
+            <div v-if="showAdvanceModal" class="modal-backdrop" @click.self="closeAdvanceModal">
                 <section class="choice-modal">
                     <div class="section-title">
                         <div>
-                            <h2>Nouvelle avance</h2>
-                            <p>{{ selectedAdvanceEmployee?.name || 'Employé' }}</p>
+                            <h2>{{ editingAdvance ? 'Modifier avance' : 'Nouvelle avance' }}</h2>
+                            <p>{{ selectedAdvanceEmployee?.name || 'Avance sur salaire' }}</p>
                         </div>
-                        <button class="table-icon" type="button" @click="showAdvanceModal = false" title="Fermer" aria-label="Fermer">
+                        <button class="table-icon" type="button" @click="closeAdvanceModal" title="Fermer" aria-label="Fermer">
                             <i class="fa-solid fa-xmark"></i>
                         </button>
                     </div>
                     <form class="payment-modal-form" @submit.prevent="saveAdvance">
+                        <label v-if="!selectedAdvanceEmployee">Employé
+                            <select v-model="advanceForm.employee_id" required>
+                                <option value="">Choisir</option>
+                                <option v-for="employee in employees" :key="employee.id" :value="employee.id">{{ employee.name }}</option>
+                            </select>
+                        </label>
                         <label>Montant avance
                             <input v-model.number="advanceForm.amount" type="number" required min="1">
                         </label>
@@ -2394,11 +2726,38 @@
                             <input v-model="advanceForm.advanced_on" type="date" required>
                         </label>
                         <div class="choice-actions">
-                            <button class="btn btn-light" type="button" @click="showAdvanceModal = false">
+                            <button class="btn btn-light" type="button" @click="closeAdvanceModal">
                                 <i class="fa-solid fa-xmark"></i>Annuler
                             </button>
-                            <button class="btn btn-primary" type="submit">
-                                <i class="fa-solid fa-check"></i>Enregistrer
+                            <button class="btn btn-primary" type="submit" :disabled="savingAdvance">
+                                <i class="fa-solid fa-check"></i>{{ savingAdvance ? 'Enregistrement...' : (editingAdvance ? 'Modifier' : 'Enregistrer') }}
+                            </button>
+                        </div>
+                    </form>
+                </section>
+            </div>
+
+            <div v-if="showEmployeeBanModal" class="modal-backdrop" @click.self="closeEmployeeBanModal">
+                <section class="choice-modal">
+                    <div class="section-title">
+                        <div>
+                            <h2>Bannir employé</h2>
+                            <p>{{ selectedBanEmployee?.name || 'Employé' }}</p>
+                        </div>
+                        <button class="table-icon" type="button" @click="closeEmployeeBanModal" title="Fermer" aria-label="Fermer">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+                    <form class="payment-modal-form" @submit.prevent="banEmployee">
+                        <label>Motif
+                            <textarea v-model="employeeBanForm.reason" required rows="4" placeholder="Indiquez le motif du bannissement"></textarea>
+                        </label>
+                        <div class="choice-actions">
+                            <button class="btn btn-light" type="button" @click="closeEmployeeBanModal">
+                                <i class="fa-solid fa-xmark"></i>Annuler
+                            </button>
+                            <button class="btn btn-primary" type="submit" :disabled="savingEmployeeBan">
+                                <i class="fa-solid fa-user-slash"></i>{{ savingEmployeeBan ? 'Bannissement...' : 'Bannir' }}
                             </button>
                         </div>
                     </form>
@@ -2409,28 +2768,37 @@
                 <section class="choice-modal">
                     <div class="section-title">
                         <div>
-                            <h2>Calculer paie</h2>
+                            <h2>Nouveau salaire</h2>
                         </div>
                         <button class="table-icon" type="button" @click="showPayrollModal = false" title="Fermer" aria-label="Fermer">
                             <i class="fa-solid fa-xmark"></i>
                         </button>
                     </div>
-                    <form class="payment-modal-form" @submit.prevent="generatePayroll">
+                    <form class="payment-modal-form" @submit.prevent="paySalary">
                         <label>Employé
-                            <select v-model="payrollForm.employee_id" required>
+                            <select v-model="payrollForm.employee_id" required @change="payrollForm.paid_amount = ''">
                                 <option value="">Choisir</option>
                                 <option v-for="employee in employees" :key="employee.id" :value="employee.id">{{ employee.name }}</option>
                             </select>
                         </label>
                         <label>Période
-                            <input v-model="payrollForm.period" type="month" required>
+                            <input v-model="payrollForm.period" type="month" required @change="payrollForm.paid_amount = ''">
+                        </label>
+                        <div v-if="selectedPayrollEmployee" class="receivable-detail-grid full">
+                            <div><span>Salaire mensuel</span><strong>{{ formatMoney(selectedPayrollEmployee.salary || 0) }}</strong></div>
+                            <div><span>Avances en cours</span><strong>{{ formatMoney(selectedPayrollAdvanceTotal) }}</strong></div>
+                            <div><span>Salaire net estimé</span><strong>{{ formatMoney(selectedPayrollNetEstimate) }}</strong></div>
+                            <div><span>Avances trouvées</span><strong>{{ selectedPayrollAdvances.length }}</strong></div>
+                        </div>
+                        <label v-if="selectedPayrollEmployee">Salaire payé
+                            <input v-model.number="payrollForm.paid_amount" type="number" min="0" :placeholder="String(selectedPayrollNetEstimate)">
                         </label>
                         <div class="choice-actions">
                             <button class="btn btn-light" type="button" @click="showPayrollModal = false">
                                 <i class="fa-solid fa-xmark"></i>Annuler
                             </button>
                             <button class="btn btn-primary" type="submit">
-                                <i class="fa-solid fa-check"></i>Calculer
+                                <i class="fa-solid fa-check"></i>Payer salaire
                             </button>
                         </div>
                     </form>
@@ -2447,6 +2815,7 @@
                     </div>
                     <div class="segmented-actions">
                         <button class="btn btn-light" type="button" @click="printFilteredEmployees"><i class="fa-solid fa-file-pdf"></i>PDF</button>
+                        <button class="btn btn-primary" type="button" @click="exportFilteredEmployeesExcel"><i class="fa-solid fa-file-excel"></i>Excel</button>
                     </div>
                 </section>
             </div>
@@ -2461,26 +2830,104 @@
                     </div>
                     <div class="segmented-actions">
                         <button class="btn btn-light" type="button" @click="printFilteredPayrolls"><i class="fa-solid fa-file-pdf"></i>PDF</button>
+                        <button class="btn btn-primary" type="button" @click="exportFilteredPayrollsExcel"><i class="fa-solid fa-file-excel"></i>Excel</button>
                     </div>
                 </section>
             </div>
 
-            <section v-if="activeSection === 'reports'" class="card">
+            <section v-if="activeSection === 'reports'" class="reports-page">
                 <div class="section-title">
                     <div>
                         <h2>Rapports</h2>
-                        <p>Générez les rapports journalier, hebdomadaire et mensuel avec ventes, charges, créances, dettes et paies.</p>
+                        <p>Générez, imprimez et exportez les données utiles pour suivre la boutique.</p>
                     </div>
                 </div>
-                <div class="report-actions">
-                    <a class="btn btn-light" :href="`/businesses/${businessId}/reports/daily`" target="_blank"><i class="fa-solid fa-calendar-day"></i>Rapport journalier</a>
-                    <a class="btn btn-light" :href="`/businesses/${businessId}/reports/weekly`" target="_blank"><i class="fa-solid fa-calendar-week"></i>Rapport hebdomadaire</a>
-                    <a class="btn btn-primary" :href="`/businesses/${businessId}/reports/monthly`" target="_blank"><i class="fa-solid fa-calendar-days"></i>Rapport mensuel</a>
-                    <a class="btn btn-light" :href="`/businesses/${businessId}/exports/products`"><i class="fa-solid fa-file-csv"></i>Export produits</a>
-                    <a class="btn btn-light" :href="`/businesses/${businessId}/exports/sales`"><i class="fa-solid fa-file-csv"></i>Export ventes</a>
-                    <a class="btn btn-light" :href="`/businesses/${businessId}/exports/expenses`"><i class="fa-solid fa-file-csv"></i>Export charges</a>
+
+                <div class="report-summary-grid">
+                    <article v-for="item in reportSummaryCards" :key="item.label" class="report-summary-card">
+                        <i :class="item.icon"></i>
+                        <span>{{ item.label }}</span>
+                        <strong>{{ item.value }}</strong>
+                    </article>
+                </div>
+
+                <div class="reports-grid">
+                    <article class="report-panel">
+                        <div>
+                            <h3>Rapport financier</h3>
+                            <p>Choisissez la période puis ouvrez le rapport imprimable.</p>
+                        </div>
+                        <div class="report-form">
+                            <label>Période
+                                <select v-model="reportPeriod">
+                                    <option v-for="period in reportPeriods" :key="period.value" :value="period.value">{{ period.label }}</option>
+                                </select>
+                            </label>
+                            <label v-if="reportPeriod === 'custom'">Début
+                                <input v-model="reportStartDate" type="date" required>
+                            </label>
+                            <label v-if="reportPeriod === 'custom'">Fin
+                                <input v-model="reportEndDate" type="date" required>
+                            </label>
+                        </div>
+                        <div class="report-actions">
+                            <button class="btn btn-primary" type="button" :disabled="!canOpenSelectedReport" @click="openReportFormatModal(reportPeriod)">
+                                <i class="fa-solid fa-print"></i>Ouvrir le rapport
+                            </button>
+                            <button class="btn btn-light" type="button" @click="openTaxFormatModal">
+                                <i class="fa-solid fa-file-invoice-dollar"></i>Bilan comptable
+                            </button>
+                        </div>
+                    </article>
+
+                    <article class="report-panel">
+                        <div>
+                            <h3>Rapports rapides</h3>
+                            <p>Accès direct aux périodes les plus utilisées.</p>
+                        </div>
+                        <div class="report-actions compact">
+                            <button v-for="period in quickReportPeriods" :key="period.value" class="btn btn-light" type="button" @click="openReportFormatModal(period.value)">
+                                <i :class="period.icon"></i>{{ period.label }}
+                            </button>
+                        </div>
+                    </article>
+
+                    <article class="report-panel full">
+                        <div>
+                            <h3>Rapports précis</h3>
+                            <p>Cliquez pour télecharger des rapports précis</p>
+                        </div>
+                        <div class="report-export-grid">
+                            <button v-for="item in reportExports" :key="item.type" class="report-export" type="button" @click="openExportFormatModal(item)">
+                                <i :class="item.icon"></i>
+                                <span>{{ item.label }}</span>
+                            </button>
+                        </div>
+                    </article>
                 </div>
             </section>
+
+            <div v-if="showReportFormatModal" class="modal-backdrop" @click.self="showReportFormatModal = false">
+                <section class="choice-modal">
+                    <div class="section-title">
+                        <div>
+                            <h2>Exporter le rapport</h2>
+                            <p>{{ selectedDownloadTitle }}</p>
+                        </div>
+                        <button class="table-icon" type="button" @click="showReportFormatModal = false" title="Fermer" aria-label="Fermer">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+                    <div class="segmented-actions">
+                        <button class="btn btn-light" type="button" @click="exportSelectedDownload('pdf')">
+                            <i class="fa-solid fa-file-pdf"></i>PDF
+                        </button>
+                        <button class="btn btn-primary" type="button" @click="exportSelectedDownload('excel')">
+                            <i class="fa-solid fa-file-excel"></i>Excel
+                        </button>
+                    </div>
+                </section>
+            </div>
 
             <section v-if="activeSection === 'taxes'" class="content-grid">
                 <article class="card">
@@ -2547,6 +2994,7 @@ const suppliers = ref([]);
 const supplierDebts = ref([]);
 const expenses = ref([]);
 const employees = ref([]);
+const employeeTypes = ref([]);
 const payrolls = ref([]);
 const taxFaq = ref([]);
 const taxStatement = ref(null);
@@ -2563,6 +3011,17 @@ const summary = reactive({
     monthly_expenses_total: 0,
     sellers_count: 0,
 });
+const today = new Date().toISOString().slice(0, 10);
+const reportPeriod = ref('monthly');
+const reportStartDate = ref(today);
+const reportEndDate = ref(today);
+const showReportFormatModal = ref(false);
+const selectedReportPeriod = ref('monthly');
+const selectedDownload = reactive({
+    title: '',
+    pdfUrl: '',
+    excelUrl: '',
+});
 const saving = ref(false);
 const savingSale = ref(false);
 const message = ref('');
@@ -2570,6 +3029,7 @@ const saleMessage = ref('');
 const receivableMessage = ref('');
 const supplierDebtMessage = ref('');
 const supplierMessage = ref('');
+const profileMessage = ref('');
 const savingSupplierDebt = ref(false);
 const savingSupplier = ref(false);
 const expenseMessage = ref('');
@@ -2607,10 +3067,16 @@ const showCustomerCreateModal = ref(false);
 const showCustomerPrintModal = ref(false);
 const showCustomerDetailsModal = ref(false);
 const showEmployeeModal = ref(false);
+const showEmployeeDetailsModal = ref(false);
 const showAdvanceModal = ref(false);
+const showEmployeeBanModal = ref(false);
 const showPayrollModal = ref(false);
 const showEmployeePrintModal = ref(false);
 const showPayrollPrintModal = ref(false);
+const showProfileCurrentPassword = ref(false);
+const showProfilePassword = ref(false);
+const showProfilePasswordConfirmation = ref(false);
+const savingProfilePassword = ref(false);
 const receivableDateMode = ref('exact');
 const selectedReceivable = ref(null);
 const selectedReceivableDetails = ref(null);
@@ -2624,16 +3090,22 @@ const editingSupplierDebtPayment = ref(null);
 const selectedSupplierDetails = ref(null);
 const editingSupplier = ref(null);
 const editingEmployee = ref(null);
+const editingAdvance = ref(null);
 const selectedAdvanceEmployee = ref(null);
+const selectedBanEmployee = ref(null);
+const selectedEmployeeDetails = ref(null);
 const customerView = ref('receivables');
 const supplierView = ref('debts');
 const salesView = ref('invoices');
 const employeeView = ref('staff');
+const payrollSubView = ref('payrolls');
 const savingReceivable = ref(false);
 const savingCustomer = ref(false);
 const employeeMessage = ref('');
 const payrollMessage = ref('');
 const savingEmployee = ref(false);
+const savingAdvance = ref(false);
+const savingEmployeeBan = ref(false);
 const savingSubscription = ref(false);
 const savingSettings = ref(false);
 const subscriptionMessage = ref('');
@@ -2656,8 +3128,14 @@ const routeSectionMap = {
     rapports: 'reports',
     stocks: 'stocks',
     ventes: 'sales',
+    caisse: 'seller-cashier',
+    proforma: 'seller-proforma',
+    'mes-ventes': 'seller-sales',
+    produits: 'seller-products',
+    profil: 'seller-profile',
 };
 const activeSection = ref(routeSectionMap[props.initialSection] || 'dashboard');
+const sellerSections = ['seller-cashier', 'seller-proforma', 'seller-sales', 'seller-products', 'seller-profile'];
 const sidebarOpen = ref(false);
 const pageMeta = {
     dashboard: ['Tableau de bord', 'Vos statistiques essentielles.'],
@@ -2671,13 +3149,139 @@ const pageMeta = {
     reports: ['Rapports', 'Exports et rapports PDF ou Excel.'],
     taxes: ['Impôts & comptabilité', 'Bilan estimé et repères comptables.'],
     settings: ['Paramètres boutique', 'Informations affichées sur vos documents.'],
+    'seller-cashier': ['Caisse', 'Nouvelle vente et facture rapide.'],
+    'seller-proforma': ['Proforma', 'Préparation des devis avant validation.'],
+    'seller-sales': ['Mes ventes', 'Historique de vos ventes et factures.'],
+    'seller-products': ['Produits', 'Catalogue et stocks disponibles.'],
+    'seller-profile': ['Profil', 'Paramètres de votre compte vendeur.'],
 };
 const pageTitle = computed(() => pageMeta[activeSection.value]?.[0] || 'Tableau de bord');
 const pageSubtitle = computed(() => pageMeta[activeSection.value]?.[1] || 'Vos statistiques essentielles.');
 const currentUserCanSell = computed(() => currentUser.value?.role === 'Vendeur');
+const sellerCheckoutActive = computed(() => currentUserCanSell.value && ['seller-cashier', 'seller-proforma', 'sales'].includes(activeSection.value));
+const salesHistoryActive = computed(() => activeSection.value === 'sales' || activeSection.value === 'seller-sales');
+const sellerCheckoutSubmitLabel = computed(() => activeSection.value === 'seller-proforma' ? 'Enregistrer la proforma' : 'Valider la facture');
+const sellerSalesTitle = computed(() => {
+    if (currentUserCanSell.value) {
+        return 'Mes ventes';
+    }
+
+    return salesView.value === 'proformas' ? 'Factures Pro forma' : 'Factures & ventes';
+});
+const salesEmptyColspan = computed(() => {
+    if (currentUserCanSell.value) {
+        return salesView.value === 'proformas' ? 5 : 7;
+    }
+
+    return salesView.value === 'proformas' ? 6 : 8;
+});
+const reportPeriods = [
+    { value: 'daily', label: 'Journalier' },
+    { value: 'weekly', label: 'Hebdomadaire' },
+    { value: 'monthly', label: 'Mensuel' },
+    { value: 'quarterly', label: 'Trimestriel' },
+    { value: 'yearly', label: 'Annuel' },
+    { value: 'custom', label: 'Période personnalisée' },
+];
+const quickReportPeriods = [
+    { value: 'daily', label: 'Jour', icon: 'fa-solid fa-calendar-day' },
+    { value: 'weekly', label: 'Semaine', icon: 'fa-solid fa-calendar-week' },
+    { value: 'monthly', label: 'Mois', icon: 'fa-solid fa-calendar-days' },
+    { value: 'quarterly', label: 'Trimestre', icon: 'fa-solid fa-chart-pie' },
+    { value: 'yearly', label: 'Année', icon: 'fa-solid fa-calendar' },
+];
+const reportExports = [
+    { type: 'products', label: 'Produits', icon: 'fa-solid fa-boxes-stacked' },
+    { type: 'sales', label: 'Ventes', icon: 'fa-solid fa-receipt' },
+    { type: 'expenses', label: 'Charges', icon: 'fa-solid fa-money-bill-wave' },
+    { type: 'customers', label: 'Clients', icon: 'fa-solid fa-users' },
+    { type: 'receivables', label: 'Créances', icon: 'fa-solid fa-hand-holding-dollar' },
+    { type: 'supplier-debts', label: 'Dettes fournisseurs', icon: 'fa-solid fa-truck-field' },
+    { type: 'employees', label: 'Employés', icon: 'fa-solid fa-user-tie' },
+    { type: 'payrolls', label: 'Paies', icon: 'fa-solid fa-file-invoice-dollar' },
+];
+const canOpenSelectedReport = computed(() => reportPeriod.value !== 'custom' || (reportStartDate.value && reportEndDate.value && reportStartDate.value <= reportEndDate.value));
+const selectedReportUrl = computed(() => buildReportUrl(reportPeriod.value));
+const selectedDownloadTitle = computed(() => selectedDownload.title || 'Rapport');
+const reportSummaryCards = computed(() => [
+    { label: "Ventes aujourd'hui", value: formatMoney(summary.today_sales_total), icon: 'fa-solid fa-cash-register' },
+    { label: 'Ventes totales', value: formatMoney(summary.sales_total), icon: 'fa-solid fa-chart-line' },
+    { label: 'Charges du mois', value: formatMoney(summary.monthly_expenses_total), icon: 'fa-solid fa-money-bill-wave' },
+    { label: 'Valeur du stock', value: formatMoney(summary.stock_value), icon: 'fa-solid fa-boxes-stacked' },
+    { label: 'Créances ouvertes', value: formatMoney(receivables.value.reduce((sum, item) => sum + Number(item.remaining || 0), 0)), icon: 'fa-solid fa-file-invoice' },
+    { label: 'Dettes fournisseurs', value: formatMoney(supplierDebts.value.reduce((sum, item) => sum + Number(item.remaining || 0), 0)), icon: 'fa-solid fa-truck-field' },
+]);
 
 function sectionUrl(section) {
     return `/dashboard/${props.businessId}/${section}`;
+}
+
+function buildReportUrl(period) {
+    const base = `/businesses/${props.businessId}/reports/${period}`;
+    if (period !== 'custom') {
+        return base;
+    }
+
+    const params = new URLSearchParams({
+        start: reportStartDate.value || today,
+        end: reportEndDate.value || today,
+    });
+
+    return `${base}?${params.toString()}`;
+}
+
+function buildReportExportUrl(period) {
+    const base = `/businesses/${props.businessId}/reports/${period}/export`;
+    if (period !== 'custom') {
+        return base;
+    }
+
+    const params = new URLSearchParams({
+        start: reportStartDate.value || today,
+        end: reportEndDate.value || today,
+    });
+
+    return `${base}?${params.toString()}`;
+}
+
+function openReportFormatModal(period) {
+    selectedReportPeriod.value = period;
+    const report = reportPeriods.find((item) => item.value === period);
+    openDownloadFormatModal(
+        report?.label || 'Rapport',
+        buildReportUrl(period),
+        buildReportExportUrl(period)
+    );
+}
+
+function openTaxFormatModal() {
+    openDownloadFormatModal(
+        'Bilan comptable',
+        `/businesses/${props.businessId}/taxes/statement`,
+        `/businesses/${props.businessId}/taxes/statement/export`
+    );
+}
+
+function openExportFormatModal(item) {
+    openDownloadFormatModal(
+        item.label,
+        `/businesses/${props.businessId}/exports/${item.type}/pdf`,
+        `/businesses/${props.businessId}/exports/${item.type}`
+    );
+}
+
+function openDownloadFormatModal(title, pdfUrl, excelUrl) {
+    selectedDownload.title = title;
+    selectedDownload.pdfUrl = pdfUrl;
+    selectedDownload.excelUrl = excelUrl;
+    showReportFormatModal.value = true;
+}
+
+function exportSelectedDownload(format) {
+    const url = format === 'excel' ? selectedDownload.excelUrl : selectedDownload.pdfUrl;
+
+    showReportFormatModal.value = false;
+    window.open(url, '_blank');
 }
 
 function notify(type, message) {
@@ -2715,6 +3319,7 @@ const productFilters = reactive({
     status: '',
 });
 const productSort = ref('name_asc');
+const productPriceForms = reactive({});
 
 const saleLine = reactive({
     product_id: '',
@@ -2902,12 +3507,15 @@ const customerSort = ref('name_asc');
 const employeeForm = reactive({
     name: '',
     phone: '',
+    username: '',
     password: '',
-    position: '',
     type: 'seller',
+    custom_type: '',
     salary: '',
+    salary_payment_date: '',
     hired_at: '',
 });
+const employeePasswordVisible = ref(false);
 const employeeFilters = reactive({
     search: '',
     type: '',
@@ -2920,16 +3528,24 @@ const advanceForm = reactive({
     advanced_on: new Date().toISOString().slice(0, 10),
     notes: '',
 });
+const employeeBanForm = reactive({
+    reason: '',
+});
 
 const payrollForm = reactive({
     employee_id: '',
     period: new Date().toISOString().slice(0, 7),
+    paid_amount: '',
 });
 const payrollFilters = reactive({
     search: '',
     status: '',
 });
 const payrollSort = ref('period_desc');
+const advanceFilters = reactive({
+    search: '',
+});
+const advanceSort = ref('date_desc');
 
 const subscriptionForm = reactive({
     plan: 'monthly',
@@ -2949,6 +3565,12 @@ const settingsForm = reactive({
     show_ifu_on_documents: true,
     show_slogan_on_documents: true,
     show_address_on_documents: true,
+});
+
+const profilePasswordForm = reactive({
+    current_password: '',
+    password: '',
+    password_confirmation: '',
 });
 
 const notificationFilters = reactive({
@@ -3345,6 +3967,27 @@ const suppliersCountLabel = computed(() => {
     const count = filteredSuppliers.value.length;
     return `${count} fournisseur${count >= 2 ? 's' : ''} affiché${count >= 2 ? 's' : ''}`;
 });
+const defaultEmployeeTypes = [
+    { value: 'seller', label: 'Vendeur' },
+    { value: 'cashier', label: 'Caissier' },
+    { value: 'accountant', label: 'Comptable' },
+    { value: 'observer', label: 'Observateur' },
+];
+const employeeTypeOptions = computed(() => {
+    const options = [...defaultEmployeeTypes];
+    const knownTypes = new Set(options.map((type) => type.value));
+
+    [...employeeTypes.value, ...employees.value.map((employee) => employee.type)].forEach((type) => {
+        const value = String(type || '').trim();
+        if (value && !knownTypes.has(value)) {
+            knownTypes.add(value);
+            options.push({ value, label: value });
+        }
+    });
+
+    return options;
+});
+const employeeFormIsSeller = computed(() => employeeForm.type === 'seller');
 const filteredEmployees = computed(() => {
     const term = employeeFilters.search.trim().toLowerCase();
     const rows = employees.value.filter((employee) => {
@@ -3390,6 +4033,47 @@ const payrollsCountLabel = computed(() => {
     const count = filteredPayrolls.value.length;
     return `${count} paie${count >= 2 ? 's' : ''} affichée${count >= 2 ? 's' : ''}`;
 });
+const employeeAdvances = computed(() => employees.value.flatMap((employee) => (employee.advances || []).map((advance) => ({
+    ...advance,
+    employee: {
+        id: employee.id,
+        name: employee.name,
+    },
+}))));
+const filteredAdvances = computed(() => {
+    const term = advanceFilters.search.trim().toLowerCase();
+    const rows = employeeAdvances.value.filter((advance) => {
+        return !term
+            || [
+                advance.employee?.name,
+                advance.amount,
+                advance.notes,
+                formatDateOnly(advance.advanced_on),
+            ].some((value) => String(value || '').toLowerCase().includes(term));
+    });
+
+    return [...rows].sort((a, b) => {
+        if (advanceSort.value === 'date_asc') return String(a.advanced_on || '').localeCompare(String(b.advanced_on || ''));
+        if (advanceSort.value === 'amount_desc') return Number(b.amount || 0) - Number(a.amount || 0);
+        if (advanceSort.value === 'employee_asc') return String(a.employee?.name || '').localeCompare(String(b.employee?.name || ''), 'fr');
+        return String(b.advanced_on || '').localeCompare(String(a.advanced_on || ''));
+    });
+});
+const filteredAdvancesTotal = computed(() => filteredAdvances.value.reduce((sum, advance) => sum + Number(advance.amount || 0), 0));
+const advancesCountLabel = computed(() => {
+    const count = filteredAdvances.value.length;
+    return `${count} avance${count >= 2 ? 's' : ''} affichée${count >= 2 ? 's' : ''}`;
+});
+const selectedPayrollEmployee = computed(() => employees.value.find((employee) => Number(employee.id) === Number(payrollForm.employee_id)) || null);
+const selectedPayrollAdvances = computed(() => {
+    if (!selectedPayrollEmployee.value || !payrollForm.period) {
+        return [];
+    }
+
+    return (selectedPayrollEmployee.value.advances || []).filter((advance) => String(advance.advanced_on || '').startsWith(payrollForm.period));
+});
+const selectedPayrollAdvanceTotal = computed(() => selectedPayrollAdvances.value.reduce((sum, advance) => sum + Number(advance.amount || 0), 0));
+const selectedPayrollNetEstimate = computed(() => Math.max(0, Number(selectedPayrollEmployee.value?.salary || 0) - selectedPayrollAdvanceTotal.value));
 const customerSummaries = computed(() => {
     const customerRows = new Map();
     const ensureCustomer = (customer, fallbackName = 'Client comptoir') => {
@@ -3406,6 +4090,7 @@ const customerSummaries = computed(() => {
                 remainingDebt: 0,
                 hasDebt: false,
                 invoices: [],
+                receivables: [],
                 situation: 'Client OK',
             });
         }
@@ -3435,6 +4120,9 @@ const customerSummaries = computed(() => {
         const remaining = Number(receivable.remaining || 0);
         customer.remainingDebt += remaining;
         customer.hasDebt = customer.hasDebt || remaining > 0;
+        if (remaining > 0) {
+            customer.receivables.push(receivable);
+        }
     });
 
     return [...customerRows.values()]
@@ -3442,6 +4130,7 @@ const customerSummaries = computed(() => {
             ...customer,
             situation: customer.hasDebt ? 'Créances en cours' : 'Client OK',
             invoices: customer.invoices.sort((a, b) => String(b.sold_at || '').localeCompare(String(a.sold_at || ''))),
+            receivables: customer.receivables.sort((a, b) => String(a.due_date || '9999-12-31').localeCompare(String(b.due_date || '9999-12-31'))),
         }))
         .sort((a, b) => a.name.localeCompare(b.name, 'fr'));
 });
@@ -3672,9 +4361,39 @@ async function enhanceTables() {
     });
 }
 
-watch([activeSection, customerView, supplierView, salesView, employeeView, filteredProducts, filteredSales, filteredProformas, filteredExpenses, filteredReceivables, filteredCustomers, filteredSupplierDebts, filteredSuppliers, filteredEmployees, filteredPayrolls], () => {
+watch([activeSection, customerView, supplierView, salesView, employeeView, payrollSubView, filteredProducts, filteredSales, filteredProformas, filteredExpenses, filteredReceivables, filteredCustomers, filteredSupplierDebts, filteredSuppliers, filteredEmployees, filteredPayrolls, filteredAdvances], () => {
     enhanceTables();
 }, { flush: 'post' });
+
+watch(() => employeeForm.type, (type) => {
+    if (type !== 'seller') {
+        employeeForm.username = '';
+        employeeForm.password = '';
+        employeePasswordVisible.value = false;
+    }
+});
+
+watch([currentUserCanSell, activeSection], () => {
+    if (!currentUserCanSell.value) {
+        return;
+    }
+
+    if (!sellerSections.includes(activeSection.value)) {
+        activeSection.value = 'seller-cashier';
+    }
+
+    if (activeSection.value === 'seller-cashier') {
+        saleForm.type = 'invoice';
+    }
+
+    if (activeSection.value === 'seller-proforma') {
+        saleForm.type = 'proforma';
+    }
+
+    if (activeSection.value === 'seller-sales') {
+        salesView.value = 'invoices';
+    }
+}, { immediate: true });
 
 function isLow(product) {
     return Number(product.stock_quantity) <= Number(product.alert_threshold);
@@ -3758,6 +4477,7 @@ function notificationLabel(type) {
         receivable_due: 'Créance',
         supplier_debt_due: 'Dette',
         payroll_pending: 'Paie',
+        salary_advance: 'Avance',
         daily_report: 'Rapport',
     }[type] || type;
 }
@@ -3812,6 +4532,41 @@ function formatDateOnly(value) {
     }
 
     return formatDate(value);
+}
+
+function formatDayMonth(value) {
+    if (!value) {
+        return '-';
+    }
+
+    const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) {
+        return `${match[3]}/${match[2]}`;
+    }
+
+    return value;
+}
+
+function dateToDayMonth(value) {
+    if (!value) {
+        return '';
+    }
+
+    const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) {
+        return `${match[3]}/${match[2]}`;
+    }
+
+    return String(value);
+}
+
+function formatDayMonthInput(value) {
+    const digits = String(value || '').replace(/\D/g, '').slice(0, 4);
+    if (digits.length <= 2) {
+        return digits;
+    }
+
+    return `${digits.slice(0, 2)}/${digits.slice(2)}`;
 }
 
 function printEscapeHtml(value) {
@@ -3870,7 +4625,7 @@ function printDocumentFooterHtml() {
 
 function printDocumentStyles() {
     return `
-        body{font-family:Poppins,Arial,sans-serif;color:#17211b;padding:24px}
+        body{min-height:100vh;font-family:Poppins,Arial,sans-serif;color:#17211b;padding:24px;display:flex;flex-direction:column}
         .doc-header{display:flex;align-items:center;gap:14px;border-bottom:2px solid #10251f;padding-bottom:14px;margin-bottom:18px}
         .doc-header img,.doc-logo{width:58px;height:58px;border-radius:10px;object-fit:cover}
         .doc-logo{display:grid;place-items:center;background:linear-gradient(135deg,#2f7d69,#f5b84b);color:#10251f;font-weight:800}
@@ -3882,7 +4637,8 @@ function printDocumentStyles() {
         th,td{border:1px solid #dfe7e2;padding:9px;text-align:left;vertical-align:top}
         th{background:#10251f;color:white}
         tfoot td{font-weight:800}
-        .doc-footer{margin-top:22px;padding-top:12px;border-top:1px solid #dfe7e2;color:#52635b;font-size:12px;text-align:center}
+        .doc-footer{margin-top:auto;padding-top:12px;border-top:1px solid #dfe7e2;color:#52635b;font-size:12px;text-align:center}
+        @media print{body{min-height:100vh}}
     `;
 }
 
@@ -3915,6 +4671,15 @@ async function loadDashboard() {
 
     business.value = data.business;
     currentUser.value = data.current_user || {};
+    if (currentUser.value?.force_logout_message) {
+        window.alert(currentUser.value.force_logout_message);
+        await fetch('/deconnexion', {
+            method: 'POST',
+            headers: requestHeaders(),
+        });
+        window.location.href = '/connexion';
+        return;
+    }
     Object.assign(settingsForm, {
         name: data.business?.name || '',
         phone: data.business?.phone || '',
@@ -3940,6 +4705,9 @@ async function loadDashboard() {
         subscriptionForm.deposit_phone = subscription.value.deposit_phone;
     }
     products.value = data.products;
+    products.value.forEach((product) => {
+        productPriceForms[product.id] = Number(product.sale_price || 0);
+    });
     sales.value = data.sales;
     customers.value = data.customers || [];
     suppliers.value = data.suppliers || [];
@@ -3955,6 +4723,7 @@ async function loadDashboard() {
     }));
     expenses.value = data.expenses;
     employees.value = data.employees;
+    employeeTypes.value = data.employee_types || [];
     payrolls.value = data.payrolls;
     notifications.value = data.notifications;
     Object.assign(summary, data.summary);
@@ -4008,6 +4777,40 @@ async function saveSettings() {
         notifyError(settingsMessage.value);
     } finally {
         savingSettings.value = false;
+    }
+}
+
+async function changeProfilePassword() {
+    savingProfilePassword.value = true;
+    profileMessage.value = '';
+
+    try {
+        const response = await fetch(`/api/businesses/${props.businessId}/profile/password`, {
+            method: 'POST',
+            headers: requestHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify(profilePasswordForm),
+        });
+
+        if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.message || 'Mot de passe invalide.');
+        }
+
+        Object.assign(profilePasswordForm, {
+            current_password: '',
+            password: '',
+            password_confirmation: '',
+        });
+        showProfileCurrentPassword.value = false;
+        showProfilePassword.value = false;
+        showProfilePasswordConfirmation.value = false;
+        profileMessage.value = 'Mot de passe modifié.';
+        notifySuccess(profileMessage.value);
+    } catch (error) {
+        profileMessage.value = error.message;
+        notifyError(profileMessage.value);
+    } finally {
+        savingProfilePassword.value = false;
     }
 }
 
@@ -4101,6 +4904,34 @@ async function saveProduct() {
         notifyError(message.value);
     } finally {
         saving.value = false;
+    }
+}
+
+async function updateSellerProductPrice(product) {
+    const salePrice = Number(productPriceForms[product.id] || 0);
+
+    try {
+        const response = await fetch(`/api/businesses/${props.businessId}/products/${product.id}/price`, {
+            method: 'PATCH',
+            headers: requestHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({ sale_price: salePrice }),
+        });
+
+        if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.message || 'Prix invalide.');
+        }
+
+        const updatedProduct = await response.json();
+        const index = products.value.findIndex((item) => item.id === product.id);
+        if (index !== -1) {
+            products.value[index] = updatedProduct;
+            productPriceForms[updatedProduct.id] = Number(updatedProduct.sale_price || 0);
+        }
+        notifySuccess('Prix de vente modifié.');
+    } catch (error) {
+        productPriceForms[product.id] = Number(product.sale_price || 0);
+        notifyError(error.message);
     }
 }
 
@@ -4202,6 +5033,13 @@ async function saveSale() {
     saleMessage.value = '';
 
     try {
+        if (activeSection.value === 'seller-cashier') {
+            saleForm.type = 'invoice';
+        }
+        if (activeSection.value === 'seller-proforma') {
+            saleForm.type = 'proforma';
+        }
+
         const documentType = saleForm.type;
         const response = await fetch(`/api/businesses/${props.businessId}/sales`, {
             method: 'POST',
@@ -5583,13 +6421,31 @@ async function saveEmployee() {
     employeeMessage.value = '';
 
     try {
+        const type = employeeForm.type === '__other' ? employeeForm.custom_type.trim() : employeeForm.type;
+        if (editingEmployee.value?.type === 'seller' && type !== 'seller') {
+            const confirmed = window.confirm("Vous êtes en train de changer le type de compte d'un vendeur. Toutes ses actions en cours seront annulées et il ne pourra plus se connecter. Voulez-vous continuer ?");
+            if (!confirmed) {
+                return;
+            }
+        }
+
+        const payload = {
+            name: employeeForm.name,
+            phone: type === 'seller' ? employeeForm.phone : '',
+            username: type === 'seller' ? employeeForm.username : '',
+            password: type === 'seller' ? employeeForm.password : '',
+            type,
+            salary: employeeForm.salary,
+            salary_payment_date: employeeForm.salary_payment_date,
+            hired_at: employeeForm.hired_at,
+        };
         const url = editingEmployee.value
             ? `/api/businesses/${props.businessId}/employees/${editingEmployee.value.id}`
             : `/api/businesses/${props.businessId}/employees`;
         const response = await fetch(url, {
             method: editingEmployee.value ? 'PUT' : 'POST',
             headers: requestHeaders({ 'Content-Type': 'application/json' }),
-            body: JSON.stringify(employeeForm),
+            body: JSON.stringify(payload),
         });
 
         if (!response.ok) {
@@ -5600,10 +6456,12 @@ async function saveEmployee() {
         Object.assign(employeeForm, {
             name: '',
             phone: '',
+            username: '',
             password: '',
-            position: '',
             type: 'seller',
+            custom_type: '',
             salary: '',
+            salary_payment_date: '',
             hired_at: '',
         });
         employeeMessage.value = 'Employé enregistré.';
@@ -5621,13 +6479,16 @@ async function saveEmployee() {
 function openEmployeeModal(employee = null) {
     employeeMessage.value = '';
     editingEmployee.value = employee;
+    employeePasswordVisible.value = false;
     Object.assign(employeeForm, {
         name: employee?.name || '',
         phone: employee?.user?.phone || '',
+        username: employee?.user?.username || '',
         password: '',
-        position: employee?.position || '',
         type: employee?.type || 'seller',
+        custom_type: '',
         salary: employee?.salary || '',
+        salary_payment_date: dateToDayMonth(employee?.salary_payment_date),
         hired_at: employee?.hired_at || '',
     });
     showEmployeeModal.value = true;
@@ -5636,12 +6497,24 @@ function openEmployeeModal(employee = null) {
 function closeEmployeeModal() {
     showEmployeeModal.value = false;
     editingEmployee.value = null;
+    employeePasswordVisible.value = false;
 }
 
-function openAdvanceModal(employee) {
+function openEmployeeDetails(employee) {
+    selectedEmployeeDetails.value = employee;
+    showEmployeeDetailsModal.value = true;
+}
+
+function closeEmployeeDetails() {
+    showEmployeeDetailsModal.value = false;
+    selectedEmployeeDetails.value = null;
+}
+
+function openAdvanceModal(employee = null) {
+    editingAdvance.value = null;
     selectedAdvanceEmployee.value = employee;
     Object.assign(advanceForm, {
-        employee_id: employee.id,
+        employee_id: employee?.id || '',
         amount: '',
         advanced_on: new Date().toISOString().slice(0, 10),
         notes: '',
@@ -5649,20 +6522,88 @@ function openAdvanceModal(employee) {
     showAdvanceModal.value = true;
 }
 
+function openAdvanceEdit(advance) {
+    editingAdvance.value = advance;
+    selectedAdvanceEmployee.value = advance.employee || null;
+    Object.assign(advanceForm, {
+        employee_id: advance.employee_id || advance.employee?.id || '',
+        amount: advance.amount || '',
+        advanced_on: String(advance.advanced_on || '').slice(0, 10),
+        notes: advance.notes || '',
+    });
+    showAdvanceModal.value = true;
+}
+
+function closeAdvanceModal() {
+    showAdvanceModal.value = false;
+    editingAdvance.value = null;
+    selectedAdvanceEmployee.value = null;
+}
+
+function openEmployeeBanModal(employee) {
+    selectedBanEmployee.value = employee;
+    employeeBanForm.reason = '';
+    showEmployeeBanModal.value = true;
+}
+
+function closeEmployeeBanModal() {
+    showEmployeeBanModal.value = false;
+    selectedBanEmployee.value = null;
+    employeeBanForm.reason = '';
+}
+
+async function banEmployee() {
+    if (!selectedBanEmployee.value) {
+        return;
+    }
+
+    savingEmployeeBan.value = true;
+    employeeMessage.value = '';
+
+    try {
+        const response = await fetch(`/api/businesses/${props.businessId}/employees/${selectedBanEmployee.value.id}/ban`, {
+            method: 'POST',
+            headers: requestHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify(employeeBanForm),
+        });
+
+        if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.message || 'Bannissement impossible.');
+        }
+
+        employeeMessage.value = 'Employé banni.';
+        notifySuccess(employeeMessage.value);
+        closeEmployeeBanModal();
+        await loadDashboard();
+    } catch (error) {
+        employeeMessage.value = error.message;
+        notifyError(employeeMessage.value);
+    } finally {
+        savingEmployeeBan.value = false;
+    }
+}
+
 function openPayrollModal() {
     Object.assign(payrollForm, {
         employee_id: '',
         period: new Date().toISOString().slice(0, 7),
+        paid_amount: '',
     });
     showPayrollModal.value = true;
 }
 
 async function saveAdvance() {
+    savingAdvance.value = true;
     payrollMessage.value = '';
+    employeeMessage.value = '';
 
     try {
-        const response = await fetch(`/api/businesses/${props.businessId}/employees/${advanceForm.employee_id}/advances`, {
-            method: 'POST',
+        const url = editingAdvance.value
+            ? `/api/businesses/${props.businessId}/salary-advances/${editingAdvance.value.id}`
+            : `/api/businesses/${props.businessId}/employees/${advanceForm.employee_id}/advances`;
+        const response = await fetch(url, {
+            method: editingAdvance.value ? 'PUT' : 'POST',
             headers: requestHeaders({ 'Content-Type': 'application/json' }),
             body: JSON.stringify(advanceForm),
         });
@@ -5678,20 +6619,61 @@ async function saveAdvance() {
             advanced_on: new Date().toISOString().slice(0, 10),
             notes: '',
         });
-        payrollMessage.value = 'Avance enregistrée.';
+        payrollMessage.value = editingAdvance.value ? 'Avance modifiée.' : 'Avance enregistrée.';
+        employeeMessage.value = payrollMessage.value;
         notifySuccess(payrollMessage.value);
-        showAdvanceModal.value = false;
+        closeAdvanceModal();
+        payrollSubView.value = 'advances';
         await loadDashboard();
     } catch (error) {
         payrollMessage.value = error.message;
+        employeeMessage.value = error.message;
+        notifyError(payrollMessage.value);
+    } finally {
+        savingAdvance.value = false;
+    }
+}
+
+async function deleteAdvance(advance) {
+    const confirmed = window.confirm(`Supprimer cette avance de ${formatMoney(advance.amount)} ?`);
+    if (!confirmed) {
+        return;
+    }
+
+    payrollMessage.value = '';
+    employeeMessage.value = '';
+
+    try {
+        const response = await fetch(`/api/businesses/${props.businessId}/salary-advances/${advance.id}`, {
+            method: 'DELETE',
+            headers: requestHeaders(),
+        });
+
+        if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.message || 'Suppression impossible.');
+        }
+
+        payrollMessage.value = 'Avance supprimée.';
+        employeeMessage.value = payrollMessage.value;
+        notifySuccess(payrollMessage.value);
+        payrollSubView.value = 'advances';
+        await loadDashboard();
+    } catch (error) {
+        payrollMessage.value = error.message;
+        employeeMessage.value = error.message;
         notifyError(payrollMessage.value);
     }
 }
 
-async function generatePayroll() {
+async function paySalary() {
     payrollMessage.value = '';
 
     try {
+        if (payrollForm.paid_amount === '' && selectedPayrollEmployee.value) {
+            payrollForm.paid_amount = selectedPayrollNetEstimate.value;
+        }
+
         const response = await fetch(`/api/businesses/${props.businessId}/payrolls`, {
             method: 'POST',
             headers: requestHeaders({ 'Content-Type': 'application/json' }),
@@ -5703,7 +6685,7 @@ async function generatePayroll() {
             throw new Error(data.message || 'Paie invalide.');
         }
 
-        payrollMessage.value = 'Paie générée.';
+        payrollMessage.value = 'Salaire payé.';
         notifySuccess(payrollMessage.value);
         showPayrollModal.value = false;
         await loadDashboard();
@@ -5727,6 +6709,30 @@ function printFilteredEmployees() {
     );
 }
 
+function downloadExcelHtml(filename, tableHtml) {
+    const blob = new Blob([`\uFEFF${tableHtml}`], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(link.href);
+}
+
+function exportFilteredEmployeesExcel() {
+    showEmployeePrintModal.value = false;
+    const rows = filteredEmployees.value.map((employee) => `<tr><td>${printEscapeHtml(employee.name)}</td><td>${printEscapeHtml(employee.position)}</td><td>${printEscapeHtml(employeeTypeLabel(employee.type))}</td><td>${Number(employee.salary || 0)}</td><td>${printEscapeHtml(formatDateOnly(employee.hired_at))}</td><td>${(employee.advances || []).reduce((sum, item) => sum + Number(item.amount), 0)}</td></tr>`).join('')
+        || '<tr><td colspan="6">Aucun employé affiché.</td></tr>';
+    const html = `
+        <table>
+            <thead><tr><th>Employé</th><th>Poste</th><th>Type</th><th>Salaire</th><th>Embauche</th><th>Avances</th></tr></thead>
+            <tbody>${rows}</tbody>
+            <tfoot><tr><td colspan="3">Masse salariale</td><td>${filteredEmployeesSalaryTotal.value}</td><td colspan="2"></td></tr></tfoot>
+        </table>
+    `;
+    downloadExcelHtml(`personnel-${new Date().toISOString().slice(0, 10)}.xls`, html);
+    notifySuccess('Export Excel généré.');
+}
+
 function printFilteredPayrolls() {
     showPayrollPrintModal.value = false;
     const rows = filteredPayrolls.value.map((payroll) => `<tr><td>${printEscapeHtml(payroll.period)}</td><td>${printEscapeHtml(payroll.employee?.name || '-')}</td><td>${formatMoney(payroll.gross_salary)}</td><td>${formatMoney(payroll.salary_advance)}</td><td>${formatMoney(payroll.net_salary)}</td><td>${printEscapeHtml(payroll.status)}</td></tr>`).join('')
@@ -5739,6 +6745,21 @@ function printFilteredPayrolls() {
         `Total net : ${formatMoney(filteredPayrollsTotal.value)}`,
         `<table><thead><tr><th>Période</th><th>Employé</th><th>Brut</th><th>Avances</th><th>Net</th><th>Statut</th></tr></thead><tbody>${rows}</tbody></table>`
     );
+}
+
+function exportFilteredPayrollsExcel() {
+    showPayrollPrintModal.value = false;
+    const rows = filteredPayrolls.value.map((payroll) => `<tr><td>${printEscapeHtml(payroll.period)}</td><td>${printEscapeHtml(payroll.employee?.name || '-')}</td><td>${Number(payroll.gross_salary || 0)}</td><td>${Number(payroll.salary_advance || 0)}</td><td>${Number(payroll.net_salary || 0)}</td><td>${printEscapeHtml(payroll.status)}</td></tr>`).join('')
+        || '<tr><td colspan="6">Aucune paie affichée.</td></tr>';
+    const html = `
+        <table>
+            <thead><tr><th>Période</th><th>Employé</th><th>Brut</th><th>Avances</th><th>Net</th><th>Statut</th></tr></thead>
+            <tbody>${rows}</tbody>
+            <tfoot><tr><td colspan="4">Total net</td><td>${filteredPayrollsTotal.value}</td><td></td></tr></tfoot>
+        </table>
+    `;
+    downloadExcelHtml(`paies-${new Date().toISOString().slice(0, 10)}.xls`, html);
+    notifySuccess('Export Excel généré.');
 }
 
 onMounted(loadDashboard);

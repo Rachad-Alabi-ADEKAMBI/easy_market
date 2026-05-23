@@ -19,7 +19,7 @@
         body { margin: 0; background: var(--paper); color: var(--ink); font-family: 'Poppins', Arial, sans-serif; line-height: 1.45; }
         .toolbar { position: sticky; top: 0; background: var(--primary); color: white; padding: 12px 20px; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
         .btn { border: 0; border-radius: 8px; padding: 10px 14px; background: var(--accent); color: white; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
-        .sheet { width: min(920px, calc(100% - 24px)); margin: 24px auto; background: white; border: 1px solid var(--line); border-radius: 10px; padding: 34px; box-shadow: 0 20px 55px rgba(25,59,50,.12); }
+        .sheet { width: min(920px, calc(100% - 24px)); min-height: calc(100vh - 48px); margin: 24px auto; background: white; border: 1px solid var(--line); border-radius: 10px; padding: 34px; box-shadow: 0 20px 55px rgba(25,59,50,.12); display: flex; flex-direction: column; }
         .header { display: grid; grid-template-columns: 1fr auto; gap: 24px; border-bottom: 2px solid var(--primary); padding-bottom: 20px; }
         .brand { display: flex; gap: 12px; align-items: center; }
         .logo { width: 54px; height: 54px; border-radius: 10px; display: grid; place-items: center; background: linear-gradient(135deg, #3f8f7b, var(--accent)); color: var(--primary); font-weight: 500; }
@@ -34,15 +34,15 @@
         .totals { margin-top: 18px; display: grid; justify-content: end; }
         .totals-row { min-width: 290px; display: flex; justify-content: space-between; gap: 20px; padding: 8px 0; }
         .grand { border-top: 2px solid var(--primary); font-size: 20px; font-weight: 500; }
-        .footer { margin-top: 34px; display: grid; grid-template-columns: 1fr 130px; gap: 20px; align-items: end; color: var(--muted); }
+        .footer { margin-top: auto; padding-top: 14px; border-top: 1px solid var(--line); display: grid; gap: 12px; justify-items: center; color: var(--muted); text-align: center; font-size: 12px; }
         #qrcode { width: 120px; height: 120px; }
         @media print {
             body { background: white; }
             .toolbar { display: none; }
-            .sheet { width: 100%; margin: 0; border: 0; box-shadow: none; border-radius: 0; }
+            .sheet { width: 100%; min-height: 100vh; margin: 0; border: 0; box-shadow: none; border-radius: 0; }
         }
         @media (max-width: 680px) {
-            .header, .meta, .footer { grid-template-columns: 1fr; }
+            .header, .meta { grid-template-columns: 1fr; }
             .invoice-box { text-align: left; }
             .sheet { padding: 20px; }
         }
@@ -100,8 +100,8 @@
         </section>
 
         <section class="footer">
-            <p>Document généré par l'application Easy_Market.</p>
             <canvas id="qrcode"></canvas>
+            <p>Document généré par l'application Easy_Market.</p>
         </section>
     </main>
 

@@ -41,6 +41,13 @@
         .links a:hover { transform:translateY(-1px); box-shadow:0 8px 18px rgba(23,33,27,.08); }
         .error { display:none; margin-bottom:14px; padding:10px 12px; border-radius:8px; background:#ffe6df; color:#a33824; font-weight:600; }
         body:has(.login[data-error="1"]) .error { display:block; }
+        .modal-backdrop { position:fixed; inset:0; display:none; place-items:center; padding:18px; background:rgba(16,37,31,.46); z-index:30; }
+        .modal-backdrop.show { display:grid; }
+        .alert-modal { width:min(430px, 100%); border-radius:12px; background:white; border:1px solid var(--line); padding:22px; box-shadow:0 24px 70px rgba(16,37,31,.22); }
+        .alert-modal i { width:42px; height:42px; border-radius:8px; display:grid; place-items:center; background:#ffe6df; color:#a33824; font-size:20px; }
+        .alert-modal h2 { margin:14px 0 8px; font-size:24px; line-height:1.15; }
+        .alert-modal p { margin-bottom:18px; }
+        .alert-modal button { width:100%; }
         @media (max-width: 460px) { .links { grid-template-columns:1fr; } }
     </style>
 </head>
@@ -81,10 +88,36 @@
             <a href="/"><i class="fa-solid fa-house"></i>Retour accueil</a>
         </div>
     </main>
+    <div class="modal-backdrop" id="account-alert" role="dialog" aria-modal="true" aria-labelledby="account-alert-title">
+        <section class="alert-modal">
+            <i class="fa-solid fa-user-slash"></i>
+            <h2 id="account-alert-title">Compte bloqué</h2>
+            <p id="account-alert-message">Votre compte ne peut pas se connecter.</p>
+            <button type="button" id="account-alert-close"><i class="fa-solid fa-check"></i>Compris</button>
+        </section>
+    </div>
     <script>
-        if (new URLSearchParams(location.search).has('erreur')) {
+        const params = new URLSearchParams(location.search);
+        if (params.has('erreur')) {
             document.querySelector('.login').dataset.error = '1';
         }
+        if (params.has('banni') || params.has('inactif')) {
+            const alert = document.querySelector('#account-alert');
+            const title = document.querySelector('#account-alert-title');
+            const message = document.querySelector('#account-alert-message');
+            if (params.has('banni')) {
+                title.textContent = 'Compte banni';
+                message.textContent = params.get('motif') || 'Votre compte a été banni par l’administrateur. Vous ne pouvez pas vous connecter.';
+            } else {
+                title.textContent = 'Compte inactif';
+                message.textContent = 'Votre compte est inactif. Contactez l’administrateur pour réactiver l’accès.';
+            }
+            alert.classList.add('show');
+        }
+        document.querySelector('#account-alert-close').addEventListener('click', function () {
+            document.querySelector('#account-alert').classList.remove('show');
+            history.replaceState(null, '', '/connexion');
+        });
         document.querySelector('.toggle-password').addEventListener('click', function () {
             const input = document.querySelector('#password');
             const icon = this.querySelector('i');

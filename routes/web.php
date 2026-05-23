@@ -41,6 +41,15 @@ function normalizePhoneInput(?string $value): ?string
     return $digits;
 }
 
+function findUserByLogin(string $login): ?User
+{
+    return filter_var($login, FILTER_VALIDATE_EMAIL)
+        ? User::where('email', $login)->first()
+        : (preg_match('/^01\d{8}$/', $login)
+            ? User::where('phone', $login)->first()
+            : User::where('username', $login)->first());
+}
+
 function requiredPhoneRule(): array
 {
     return ['required', 'regex:/^01\d{8}$/'];
@@ -49,6 +58,51 @@ function requiredPhoneRule(): array
 function nullablePhoneRule(): array
 {
     return ['nullable', 'regex:/^01\d{8}$/'];
+}
+
+function normalizeSalaryPaymentDateInput(?string $value): ?string
+{
+    $value = trim((string) $value);
+    if ($value === '') {
+        return null;
+    }
+
+    if (preg_match('/^(\d{2})\/(\d{2})$/', $value, $matches)) {
+        $day = (int) $matches[1];
+        $month = (int) $matches[2];
+
+        return checkdate($month, $day, 2000)
+            ? sprintf('2000-%02d-%02d', $month, $day)
+            : '__invalid__';
+    }
+
+    if (preg_match('/^\d{4}-(\d{2})-(\d{2})$/', $value, $matches)) {
+        $month = (int) $matches[1];
+        $day = (int) $matches[2];
+
+        return checkdate($month, $day, 2000)
+            ? sprintf('2000-%02d-%02d', $month, $day)
+            : '__invalid__';
+    }
+
+    return '__invalid__';
+}
+
+function salaryPaymentDayMonth($value): string
+{
+    if (! $value) {
+        return '';
+    }
+
+    if ($value instanceof DateTimeInterface) {
+        return $value->format('d/m');
+    }
+
+    try {
+        return \Carbon\Carbon::parse($value)->format('d/m');
+    } catch (Throwable) {
+        return '';
+    }
 }
 
 Route::get('/', function () {
@@ -107,9 +161,7 @@ Route::post('/mot-de-passe-oublie', function (Request $request) {
     $request->validate(['login' => ['required', 'string', 'max:255']]);
 
     $login = trim((string) $request->input('login'));
-    $user = filter_var($login, FILTER_VALIDATE_EMAIL)
-        ? User::where('email', $login)->first()
-        : (preg_match('/^01\d{8}$/', $login) ? User::where('phone', $login)->first() : null);
+    $user = findUserByLogin($login);
 
     if (! $user) {
         return redirect('/mot-de-passe-oublie?envoye=1');
@@ -169,12 +221,24 @@ Route::post('/connexion', function (Request $request) {
     ]);
 
     $login = trim($credentials['login']);
-    $user = filter_var($login, FILTER_VALIDATE_EMAIL)
-        ? User::where('email', $login)->first()
-        : (preg_match('/^01\d{8}$/', $login) ? User::where('phone', $login)->first() : null);
+    $user = findUserByLogin($login);
 
     if (! $user || ! Hash::check($credentials['password'], $user->password)) {
         return redirect('/connexion?erreur=1');
+    }
+
+    if (! $user->is_active) {
+        $bannedEmployee = Employee::query()
+            ->where('user_id', $user->id)
+            ->whereNotNull('banned_at')
+            ->latest('banned_at')
+            ->first();
+
+        if ($bannedEmployee) {
+            return redirect('/connexion?banni=1&motif='.urlencode($bannedEmployee->ban_reason ?: 'Votre compte a été banni par l’administrateur.'));
+        }
+
+        return redirect('/connexion?inactif=1');
     }
 
     Auth::login($user, $request->boolean('remember'));
@@ -184,6 +248,14 @@ Route::post('/connexion', function (Request $request) {
 
     if ($user->role === 'super_admin') {
         return redirect('/admin/abonnements');
+    }
+
+    $businessRole = $business
+        ? $business->users()->where('users.id', $user->id)->first()?->pivot?->role
+        : null;
+
+    if ($business && ($user->role === 'seller' || $businessRole === 'seller')) {
+        return redirect('/dashboard/'.$business->id.'/caisse');
     }
 
     return $business ? redirect('/dashboard/'.$business->id) : redirect('/');
@@ -302,6 +374,11 @@ Route::get('/dashboard/{business}/{section?}', function (Business $business, ?st
         'rapports',
         'stocks',
         'ventes',
+        'caisse',
+        'proforma',
+        'mes-ventes',
+        'produits',
+        'profil',
     ];
 
     abort_unless(in_array($section, $allowedSections, true), 404);
@@ -331,6 +408,11 @@ Route::get('/dashboard/{business}/{section?}', function (Business $business, ?st
             'rapports' => 'Rapports',
             'stocks' => 'Stocks',
             'ventes' => 'Ventes',
+            'caisse' => 'Caisse',
+            'proforma' => 'Proforma',
+            'mes-ventes' => 'Mes ventes',
+            'produits' => 'Produits',
+            'profil' => 'Profil',
         ][$section] ?? 'Tableau de bord',
         'section' => $section,
     ]))->header('Content-Type', 'text/html; charset=UTF-8');
@@ -339,6 +421,11 @@ Route::get('/dashboard/{business}/{section?}', function (Business $business, ?st
 Route::get('/api/businesses/{business}/dashboard', function (Business $business) {
     authorizeBusinessAccess($business, request());
     $business->load('subscriptions');
+    $currentUser = Auth::user();
+    $currentUserPivot = $currentUser ? $business->users()->where('users.id', $currentUser->id)->first()?->pivot : null;
+    $isSeller = $currentUser
+        && $business->owner_id !== $currentUser->id
+        && (($currentUserPivot?->role ?: $currentUser->role) === 'seller');
     $subscription = $business->subscriptions()
         ->whereIn('status', ['actif', 'active'])
         ->where(function ($query) {
@@ -398,13 +485,14 @@ Route::get('/api/businesses/{business}/dashboard', function (Business $business)
         'products' => $business->products()
             ->with('category')
             ->latest()
-            ->limit(20)
+            ->limit($isSeller ? 100 : 20)
             ->get(),
         'sales' => Sale::query()
             ->where('business_id', $business->id)
+            ->when($isSeller, fn ($query) => $query->where('seller_id', $currentUser->id))
             ->with(['items', 'customer', 'seller:id,name,phone'])
             ->latest()
-            ->limit(20)
+            ->limit($isSeller ? 50 : 20)
             ->get(),
         'customers' => Customer::query()
             ->where('business_id', $business->id)
@@ -437,19 +525,26 @@ Route::get('/api/businesses/{business}/dashboard', function (Business $business)
         'employees' => Employee::query()
             ->where('business_id', $business->id)
             ->with([
-                'user:id,name,phone',
-                'advances' => fn ($query) => $query->latest('advanced_on')->limit(5),
+                'user:id,name,username,phone',
+                'advances' => fn ($query) => $query->latest('advanced_on'),
             ])
             ->latest()
             ->limit(20)
             ->get(),
+        'employee_types' => Employee::query()
+            ->where('business_id', $business->id)
+            ->select('type')
+            ->distinct()
+            ->pluck('type')
+            ->filter()
+            ->values(),
         'payrolls' => Payroll::query()
             ->where('business_id', $business->id)
             ->with('employee')
             ->latest()
             ->limit(20)
             ->get(),
-        'notifications' => notificationsForBusiness($business),
+        'notifications' => $isSeller ? [] : notificationsForBusiness($business),
         'categories' => Category::query()
             ->where('business_id', $business->id)
             ->orderBy('name')
@@ -686,25 +781,60 @@ Route::post('/api/businesses/{business}/settings', function (Request $request, B
     return response()->json($business);
 });
 
+Route::post('/api/businesses/{business}/profile/password', function (Request $request, Business $business) {
+    authorizeBusinessAccess($business, $request);
+
+    $user = Auth::user();
+    abort_unless($user, 403);
+
+    $validator = Validator::make($request->all(), [
+        'current_password' => ['required', 'string'],
+        'password' => ['required', 'confirmed', 'min:8'],
+    ]);
+
+    if ($validator->fails()) {
+        return response()->json([
+            'message' => 'Les informations du mot de passe sont invalides.',
+            'errors' => $validator->errors(),
+        ], 422);
+    }
+
+    if (! Hash::check($request->input('current_password'), $user->password)) {
+        return response()->json([
+            'message' => 'Les informations du mot de passe sont invalides.',
+            'errors' => ['current_password' => ['Le mot de passe actuel est incorrect.']],
+        ], 422);
+    }
+
+    $user->update([
+        'password' => Hash::make($request->input('password')),
+    ]);
+
+    return response()->json(['message' => 'Mot de passe modifié.']);
+});
+
 Route::post('/api/businesses/{business}/employees', function (Request $request, Business $business) {
     authorizeBusinessAccess($business, $request);
     ensureActiveSubscription($business);
 
     $request->merge([
         'phone' => normalizePhoneInput($request->input('phone')),
+        'salary_payment_date' => normalizeSalaryPaymentDateInput($request->input('salary_payment_date')),
     ]);
 
     $validator = Validator::make($request->all(), [
         'name' => ['required', 'string', 'max:255'],
         'phone' => [...nullablePhoneRule(), Rule::unique('users', 'phone')->whereNotNull('phone')],
+        'username' => ['nullable', 'string', 'max:60', 'alpha_dash', Rule::unique('users', 'username')->whereNotNull('username')],
         'password' => ['nullable', 'string', 'min:8'],
-        'position' => ['required', 'string', 'max:255'],
-        'type' => ['required', 'in:seller,cashier,accountant,observer'],
+        'type' => ['required', 'string', 'max:30'],
         'salary' => ['required', 'integer', 'min:0'],
+        'salary_payment_date' => ['nullable', 'date_format:Y-m-d'],
         'hired_at' => ['nullable', 'date'],
     ]);
 
     $validator->sometimes('phone', requiredPhoneRule(), fn ($input) => $input->type === 'seller');
+    $validator->sometimes('username', ['required'], fn ($input) => $input->type === 'seller');
     $validator->sometimes('password', ['required'], fn ($input) => $input->type === 'seller');
 
     if ($validator->fails()) {
@@ -719,8 +849,9 @@ Route::post('/api/businesses/{business}/employees', function (Request $request, 
         $phone = trim((string) $request->input('phone'));
         $user = User::create([
             'name' => $request->input('name'),
+            'username' => $request->input('username'),
             'phone' => $phone,
-            'email' => $phone.'@phone.easymarket.local',
+            'email' => $request->input('username').'@seller.easymarket.local',
             'password' => $request->input('password'),
             'role' => 'seller',
             'can_edit_prices' => false,
@@ -739,9 +870,10 @@ Route::post('/api/businesses/{business}/employees', function (Request $request, 
         'business_id' => $business->id,
         'user_id' => $user?->id,
         'name' => $request->input('name'),
-        'position' => $request->input('position'),
+        'position' => employeeTypeLabel($request->input('type')),
         'type' => $request->input('type'),
         'salary' => $request->integer('salary'),
+        'salary_payment_date' => $request->input('salary_payment_date'),
         'hired_at' => $request->input('hired_at'),
         'is_active' => true,
     ]);
@@ -754,13 +886,23 @@ Route::put('/api/businesses/{business}/employees/{employee}', function (Request 
     abort_unless($employee->business_id === $business->id, 404);
     ensureActiveSubscription($business);
 
+    $request->merge([
+        'phone' => normalizePhoneInput($request->input('phone')),
+        'salary_payment_date' => normalizeSalaryPaymentDateInput($request->input('salary_payment_date')),
+    ]);
+
     $validator = Validator::make($request->all(), [
         'name' => ['required', 'string', 'max:255'],
-        'position' => ['required', 'string', 'max:255'],
-        'type' => ['required', 'in:seller,cashier,accountant,observer'],
+        'phone' => [...nullablePhoneRule(), Rule::unique('users', 'phone')->whereNotNull('phone')->ignore($employee->user_id)],
+        'username' => ['nullable', 'string', 'max:60', 'alpha_dash', Rule::unique('users', 'username')->whereNotNull('username')->ignore($employee->user_id)],
+        'type' => ['required', 'string', 'max:30'],
         'salary' => ['required', 'integer', 'min:0'],
+        'salary_payment_date' => ['nullable', 'date_format:Y-m-d'],
         'hired_at' => ['nullable', 'date'],
     ]);
+
+    $validator->sometimes('phone', requiredPhoneRule(), fn ($input) => $input->type === 'seller');
+    $validator->sometimes('username', ['required'], fn ($input) => $input->type === 'seller');
 
     if ($validator->fails()) {
         return response()->json([
@@ -769,16 +911,60 @@ Route::put('/api/businesses/{business}/employees/{employee}', function (Request 
         ], 422);
     }
 
+    $wasSeller = $employee->type === 'seller';
+    $willBeSeller = $request->input('type') === 'seller';
+
     $employee->update([
         'name' => $request->input('name'),
-        'position' => $request->input('position'),
+        'position' => employeeTypeLabel($request->input('type')),
         'type' => $request->input('type'),
         'salary' => $request->integer('salary'),
+        'salary_payment_date' => $request->input('salary_payment_date'),
         'hired_at' => $request->input('hired_at'),
     ]);
 
     if ($employee->user) {
-        $employee->user->update(['name' => $request->input('name')]);
+        $updates = ['name' => $request->input('name')];
+
+        if ($willBeSeller) {
+            $updates['phone'] = normalizePhoneInput($request->input('phone'));
+            $updates['username'] = $request->input('username');
+        }
+
+        if ($wasSeller && ! $willBeSeller) {
+            $updates['is_active'] = false;
+        }
+
+        $employee->user->update($updates);
+    }
+
+    return response()->json($employee->fresh('user'));
+});
+
+Route::post('/api/businesses/{business}/employees/{employee}/ban', function (Request $request, Business $business, Employee $employee) {
+    authorizeBusinessAccess($business, $request);
+    abort_unless($employee->business_id === $business->id, 404);
+    ensureActiveSubscription($business);
+
+    $validator = Validator::make($request->all(), [
+        'reason' => ['required', 'string', 'max:1000'],
+    ]);
+
+    if ($validator->fails()) {
+        return response()->json([
+            'message' => 'Le motif du bannissement est obligatoire.',
+            'errors' => $validator->errors(),
+        ], 422);
+    }
+
+    $employee->update([
+        'is_active' => false,
+        'banned_at' => now(),
+        'ban_reason' => $request->input('reason'),
+    ]);
+
+    if ($employee->user) {
+        $employee->user->update(['is_active' => false]);
     }
 
     return response()->json($employee->fresh('user'));
@@ -810,7 +996,56 @@ Route::post('/api/businesses/{business}/employees/{employee}/advances', function
         'notes' => $request->input('notes'),
     ]);
 
+    AppNotification::create([
+        'business_id' => $business->id,
+        'type' => 'salary_advance',
+        'title' => 'Avance sur salaire enregistrée',
+        'message' => sprintf(
+            '%s a reçu une avance de %s FCFA.',
+            $employee->name,
+            number_format($advance->amount, 0, ',', ' ')
+        ),
+        'channel' => 'in_app',
+    ]);
+
     return response()->json($advance, 201);
+});
+
+Route::put('/api/businesses/{business}/salary-advances/{advance}', function (Request $request, Business $business, SalaryAdvance $advance) {
+    authorizeBusinessAccess($business, $request);
+    abort_unless($advance->business_id === $business->id, 404);
+    ensureActiveSubscription($business);
+
+    $validator = Validator::make($request->all(), [
+        'amount' => ['required', 'integer', 'min:1'],
+        'advanced_on' => ['required', 'date'],
+        'notes' => ['nullable', 'string'],
+    ]);
+
+    if ($validator->fails()) {
+        return response()->json([
+            'message' => "L'avance sur salaire est invalide.",
+            'errors' => $validator->errors(),
+        ], 422);
+    }
+
+    $advance->update([
+        'amount' => $request->integer('amount'),
+        'advanced_on' => $request->input('advanced_on'),
+        'notes' => $request->input('notes'),
+    ]);
+
+    return response()->json($advance->fresh());
+});
+
+Route::delete('/api/businesses/{business}/salary-advances/{advance}', function (Request $request, Business $business, SalaryAdvance $advance) {
+    authorizeBusinessAccess($business, $request);
+    abort_unless($advance->business_id === $business->id, 404);
+    ensureActiveSubscription($business);
+
+    $advance->delete();
+
+    return response()->json(['message' => 'Avance supprimée.']);
 });
 
 Route::post('/api/businesses/{business}/payrolls', function (Request $request, Business $business) {
@@ -820,6 +1055,7 @@ Route::post('/api/businesses/{business}/payrolls', function (Request $request, B
     $validator = Validator::make($request->all(), [
         'employee_id' => ['required', 'integer', 'exists:employees,id'],
         'period' => ['required', 'date_format:Y-m'],
+        'paid_amount' => ['nullable', 'integer', 'min:0'],
     ]);
 
     if ($validator->fails()) {
@@ -841,7 +1077,8 @@ Route::post('/api/businesses/{business}/payrolls', function (Request $request, B
         ->sum('amount');
 
     $gross = $employee->salary;
-    $net = max(0, $gross - $advanceTotal);
+    $estimatedNet = max(0, $gross - $advanceTotal);
+    $net = $request->filled('paid_amount') ? $request->integer('paid_amount') : $estimatedNet;
 
     $payroll = Payroll::updateOrCreate(
         [
@@ -853,7 +1090,8 @@ Route::post('/api/businesses/{business}/payrolls', function (Request $request, B
             'gross_salary' => $gross,
             'salary_advance' => $advanceTotal,
             'net_salary' => $net,
-            'status' => 'pending',
+            'status' => 'paid',
+            'paid_at' => now(),
         ]
     );
 
@@ -1397,16 +1635,20 @@ Route::get('/businesses/{business}/sales/{sale}/invoice', function (Business $bu
 
 Route::get('/businesses/{business}/reports/{period}', function (Business $business, string $period) {
     authorizeBusinessAccess($business, request());
-    abort_unless(in_array($period, ['daily', 'weekly', 'monthly'], true), 404);
+    abort_unless(in_array($period, ['daily', 'weekly', 'monthly', 'quarterly', 'yearly', 'custom'], true), 404);
 
-    $range = reportRange($period);
+    $range = reportRange($period, request());
     $data = reportData($business, $range[0], $range[1], $period);
+    $branding = documentBranding($business);
 
     $rows = collect($data['top_products'])->map(fn ($item) => '<tr><td>'.e($item->product_name).'</td><td>'.e($item->quantity).'</td><td>'.number_format($item->total, 0, ',', ' ').' FCFA</td></tr>')->implode('');
 
     $html = str_replace(
-        ['__BUSINESS__', '__PERIOD_LABEL__', '__RANGE__', '__SALES_TOTAL__', '__EXPENSES_TOTAL__', '__NET_RESULT__', '__RECEIVABLES__', '__DEBTS__', '__PAYROLLS__', '__TOP_PRODUCTS__'],
+        ['__PRIMARY_COLOR__', '__SECONDARY_COLOR__', '__BUSINESS_HEADER__', '__BUSINESS__', '__PERIOD_LABEL__', '__RANGE__', '__SALES_TOTAL__', '__EXPENSES_TOTAL__', '__NET_RESULT__', '__RECEIVABLES__', '__DEBTS__', '__PAYROLLS__', '__TOP_PRODUCTS__'],
         [
+            e($branding['primary_color']),
+            e($branding['secondary_color']),
+            $branding['header_html'],
             e($business->name),
             e($data['period_label']),
             e($data['range_label']),
@@ -1424,11 +1666,38 @@ Route::get('/businesses/{business}/reports/{period}', function (Business $busine
     return response($html)->header('Content-Type', 'text/html; charset=UTF-8');
 });
 
+Route::get('/businesses/{business}/reports/{period}/export', function (Business $business, string $period) {
+    authorizeBusinessAccess($business, request());
+    abort_unless(in_array($period, ['daily', 'weekly', 'monthly', 'quarterly', 'yearly', 'custom'], true), 404);
+
+    $range = reportRange($period, request());
+    $data = reportData($business, $range[0], $range[1], $period);
+    $rows = [
+        ...documentCsvHeaderRows($business),
+        ['Période', $data['period_label']],
+        ['Dates', $data['range_label']],
+        ['Ventes', $data['sales_total']],
+        ['Charges', $data['expenses_total']],
+        ['Paies', $data['payrolls_total']],
+        ['Résultat net', $data['net_result']],
+        ['Créances restantes', $data['receivables_remaining']],
+        ['Dettes fournisseurs', $data['debts_remaining']],
+        [],
+        ['Top produits', 'Quantité', 'Total'],
+    ];
+
+    foreach ($data['top_products'] as $product) {
+        $rows[] = [$product->product_name, $product->quantity, $product->total];
+    }
+
+    return csvResponse('rapport-'.$period.'.csv', ['Indicateur', 'Valeur', 'Montant'], $rows);
+});
+
 Route::get('/api/businesses/{business}/reports/{period}', function (Business $business, string $period) {
     authorizeBusinessAccess($business, request());
-    abort_unless(in_array($period, ['daily', 'weekly', 'monthly'], true), 404);
+    abort_unless(in_array($period, ['daily', 'weekly', 'monthly', 'quarterly', 'yearly', 'custom'], true), 404);
 
-    $range = reportRange($period);
+    $range = reportRange($period, request());
 
     return response()->json(reportData($business, $range[0], $range[1], $period));
 });
@@ -1437,10 +1706,14 @@ Route::get('/businesses/{business}/taxes/statement', function (Business $busines
     authorizeBusinessAccess($business, request());
     $range = [now()->startOfMonth(), now()->endOfMonth()];
     $data = reportData($business, $range[0], $range[1], 'monthly');
+    $branding = documentBranding($business);
 
     $html = str_replace(
-        ['__BUSINESS__', '__PERIOD__', '__SALES__', '__EXPENSES__', '__PAYROLLS__', '__NET__', '__RECEIVABLES__', '__DEBTS__'],
+        ['__PRIMARY_COLOR__', '__SECONDARY_COLOR__', '__BUSINESS_HEADER__', '__BUSINESS__', '__PERIOD__', '__SALES__', '__EXPENSES__', '__PAYROLLS__', '__NET__', '__RECEIVABLES__', '__DEBTS__', '__STOCK_VALUE__', '__ASSETS_TOTAL__', '__EQUITY_ESTIMATE__', '__PRODUCTS_COUNT__', '__RECEIVABLES_COUNT__', '__DEBTS_COUNT__'],
         [
+            e($branding['primary_color']),
+            e($branding['secondary_color']),
+            $branding['header_html'],
             e($business->name),
             e($data['range_label']),
             number_format($data['sales_total'], 0, ',', ' ').' FCFA',
@@ -1449,11 +1722,50 @@ Route::get('/businesses/{business}/taxes/statement', function (Business $busines
             number_format($data['net_result'], 0, ',', ' ').' FCFA',
             number_format($data['receivables_remaining'], 0, ',', ' ').' FCFA',
             number_format($data['debts_remaining'], 0, ',', ' ').' FCFA',
+            number_format($data['stock_value'], 0, ',', ' ').' FCFA',
+            number_format($data['balance_assets_total'], 0, ',', ' ').' FCFA',
+            number_format($data['balance_equity_estimate'], 0, ',', ' ').' FCFA',
+            number_format($data['products_count'], 0, ',', ' '),
+            number_format($data['receivables_count'], 0, ',', ' '),
+            number_format($data['debts_count'], 0, ',', ' '),
         ],
         file_get_contents(resource_path('views/tax-statement.blade.php'))
     );
 
     return response($html)->header('Content-Type', 'text/html; charset=UTF-8');
+});
+
+Route::get('/businesses/{business}/taxes/statement/export', function (Business $business) {
+    authorizeBusinessAccess($business, request());
+    $range = [now()->startOfMonth(), now()->endOfMonth()];
+    $data = reportData($business, $range[0], $range[1], 'monthly');
+    $rows = [
+        ...documentCsvHeaderRows($business),
+        ['Période', $data['range_label']],
+        ['Recettes', $data['sales_total']],
+        ['Dépenses', $data['expenses_total']],
+        ['Paies nettes', $data['payrolls_total']],
+        ['Résultat net estimé', $data['net_result']],
+        ['Créances clients', $data['receivables_remaining']],
+        ['Dettes fournisseurs', $data['debts_remaining']],
+        [],
+        ['ACTIF'],
+        ['Stock valorisé au coût d’achat', $data['stock_value']],
+        ['Créances clients à encaisser', $data['receivables_remaining']],
+        ['Total actif estimé', $data['balance_assets_total']],
+        [],
+        ['PASSIF ET SITUATION NETTE'],
+        ['Dettes fournisseurs à payer', $data['debts_remaining']],
+        ['Situation nette estimée', $data['balance_equity_estimate']],
+        ['Total passif + situation nette', $data['balance_assets_total']],
+        [],
+        ['INDICATEURS'],
+        ['Produits en stock', $data['products_count']],
+        ['Créances ouvertes', $data['receivables_count']],
+        ['Dettes ouvertes', $data['debts_count']],
+    ];
+
+    return csvResponse('bilan-comptable.csv', ['Indicateur', 'Valeur'], $rows);
 });
 
 Route::get('/api/businesses/{business}/taxes', function (Business $business) {
@@ -1527,6 +1839,40 @@ Route::post('/api/businesses/{business}/products', function (Request $request, B
     return response()->json($product->load('category'), 201);
 });
 
+Route::patch('/api/businesses/{business}/products/{product}/price', function (Request $request, Business $business, Product $product) {
+    authorizeBusinessAccess($business, $request);
+    ensureActiveSubscription($business);
+    abort_unless($product->business_id === $business->id, 404);
+
+    $user = Auth::user();
+    $pivot = $user ? $business->users()->where('users.id', $user->id)->first()?->pivot : null;
+    $canEditPrice = $user
+        && ($business->owner_id === $user->id || $pivot?->role === 'admin' || (bool) $pivot?->can_edit_prices);
+
+    if (! $canEditPrice) {
+        return response()->json([
+            'message' => 'Vous n’êtes pas autorisé à modifier les prix.',
+        ], 403);
+    }
+
+    $validator = Validator::make($request->all(), [
+        'sale_price' => ['required', 'integer', 'min:0'],
+    ]);
+
+    if ($validator->fails()) {
+        return response()->json([
+            'message' => 'Prix de vente invalide.',
+            'errors' => $validator->errors(),
+        ], 422);
+    }
+
+    $product->update([
+        'sale_price' => $request->integer('sale_price'),
+    ]);
+
+    return response()->json($product->load('category'));
+});
+
 Route::post('/api/businesses/{business}/sales', function (Request $request, Business $business) {
     authorizeBusinessAccess($business, $request);
     ensureActiveSubscription($business);
@@ -1538,6 +1884,7 @@ Route::post('/api/businesses/{business}/sales', function (Request $request, Busi
     $seller = Auth::user();
     $sellerPivot = $seller ? $business->users()->where('users.id', $seller->id)->first()?->pivot : null;
     $canSell = $seller
+        && $seller->is_active
         && $business->owner_id !== $seller->id
         && ($sellerPivot?->role === 'seller' || $seller->role === 'seller');
 
@@ -1679,7 +2026,7 @@ Route::post('/api/businesses/{business}/sales', function (Request $request, Busi
 
 Route::get('/businesses/{business}/exports/{type}', function (Business $business, string $type) {
     authorizeBusinessAccess($business, request());
-    abort_unless(in_array($type, ['products', 'sales', 'expenses'], true), 404);
+    abort_unless(in_array($type, ['products', 'sales', 'expenses', 'customers', 'receivables', 'supplier-debts', 'employees', 'payrolls'], true), 404);
 
     if ($type === 'products') {
         $rows = Product::query()
@@ -1702,10 +2049,13 @@ Route::get('/businesses/{business}/exports/{type}', function (Business $business
     if ($type === 'sales') {
         $rows = Sale::query()
             ->where('business_id', $business->id)
+            ->with(['customer', 'seller:id,name,phone'])
             ->latest()
             ->get()
             ->map(fn ($sale) => [
                 $sale->number,
+                $sale->seller?->name ?: '',
+                $sale->customer?->name ?: '',
                 paymentLabel($sale->payment_method),
                 $sale->status,
                 $sale->subtotal,
@@ -1714,7 +2064,98 @@ Route::get('/businesses/{business}/exports/{type}', function (Business $business
                 optional($sale->sold_at)->format('d/m/Y H:i'),
             ]);
 
-        return csvResponse('ventes.csv', ['Facture', 'Paiement', 'Statut', 'Sous-total', 'Remise', 'Total', 'Date'], $rows);
+        return csvResponse('ventes.csv', ['Facture', 'Vendeur', 'Client', 'Paiement', 'Statut', 'Sous-total', 'Remise', 'Total', 'Date'], $rows);
+    }
+
+    if ($type === 'customers') {
+        $rows = Customer::query()
+            ->where('business_id', $business->id)
+            ->latest()
+            ->get()
+            ->map(fn ($customer) => [
+                $customer->name,
+                $customer->phone,
+                $customer->email,
+                optional($customer->created_at)->format('d/m/Y H:i'),
+            ]);
+
+        return csvResponse('clients.csv', ['Client', 'Téléphone', 'Email', 'Création'], $rows);
+    }
+
+    if ($type === 'receivables') {
+        $rows = Receivable::query()
+            ->where('business_id', $business->id)
+            ->with('customer')
+            ->latest()
+            ->get()
+            ->map(fn ($receivable) => [
+                $receivable->customer?->name ?: '',
+                $receivable->amount_due,
+                $receivable->amount_paid,
+                max(0, $receivable->amount_due - $receivable->amount_paid),
+                optional($receivable->due_date)->format('d/m/Y'),
+                $receivable->status,
+                $receivable->notes,
+            ]);
+
+        return csvResponse('creances.csv', ['Client', 'Montant dû', 'Payé', 'Reste', 'Échéance', 'Statut', 'Notes'], $rows);
+    }
+
+    if ($type === 'supplier-debts') {
+        $rows = SupplierDebt::query()
+            ->where('business_id', $business->id)
+            ->with('supplier')
+            ->latest()
+            ->get()
+            ->map(fn ($debt) => [
+                $debt->supplier?->name ?: '',
+                $debt->amount_due,
+                $debt->amount_paid,
+                max(0, $debt->amount_due - $debt->amount_paid),
+                optional($debt->due_date)->format('d/m/Y'),
+                $debt->status,
+                $debt->notes,
+            ]);
+
+        return csvResponse('dettes-fournisseurs.csv', ['Fournisseur', 'Montant dû', 'Payé', 'Reste', 'Échéance', 'Statut', 'Notes'], $rows);
+    }
+
+    if ($type === 'employees') {
+        $rows = Employee::query()
+            ->where('business_id', $business->id)
+            ->with('user:id,name,phone')
+            ->latest()
+            ->get()
+            ->map(fn ($employee) => [
+                $employee->name,
+                $employee->position,
+                $employee->type,
+                $employee->user?->phone ?: '',
+                $employee->salary,
+                salaryPaymentDayMonth($employee->salary_payment_date),
+                optional($employee->hired_at)->format('d/m/Y'),
+            ]);
+
+        return csvResponse('employes.csv', ['Employé', 'Poste', 'Type', 'Téléphone', 'Salaire', 'Date paiement salaire', 'Embauche'], $rows);
+    }
+
+    if ($type === 'payrolls') {
+        $rows = Payroll::query()
+            ->where('business_id', $business->id)
+            ->with('employee')
+            ->latest()
+            ->get()
+            ->map(fn ($payroll) => [
+                $payroll->period,
+                $payroll->employee?->name ?: '',
+                $payroll->gross_salary,
+                $payroll->salary_advance,
+                $payroll->net_salary,
+                $payroll->status,
+                optional($payroll->paid_at)->format('d/m/Y H:i'),
+            ]);
+
+        return csvResponse('paies.csv', ['Période', 'Employé', 'Brut', 'Avance', 'Net', 'Statut', 'Paiement'], $rows);
     }
 
     $rows = Expense::query()
@@ -1731,6 +2172,13 @@ Route::get('/businesses/{business}/exports/{type}', function (Business $business
         ]);
 
     return csvResponse('depenses.csv', ['Charge', 'Catégorie', 'Type', 'Montant', 'Date', 'Notes'], $rows);
+});
+
+Route::get('/businesses/{business}/exports/{type}/pdf', function (Business $business, string $type) {
+    authorizeBusinessAccess($business, request());
+    $export = exportDataset($business, $type);
+
+    return printableDatasetResponse($business, $export['title'], $export['headers'], $export['rows']);
 });
 
 if (! function_exists('requireAuthenticatedUser')) {
@@ -1789,6 +2237,7 @@ function currentUserPayload(Business $business): array
 {
     $user = Auth::user();
     $role = 'Admin';
+    $pivot = null;
 
     if ($user?->role === 'super_admin') {
         $role = 'Super Admin';
@@ -1803,9 +2252,16 @@ function currentUserPayload(Business $business): array
     }
 
     return [
+        'id' => $user?->id,
         'name' => $user?->name ?: 'Utilisateur',
         'email' => $user?->email,
+        'username' => $user?->username,
         'role' => $role,
+        'can_edit_prices' => (bool) ($pivot?->can_edit_prices ?? $user?->can_edit_prices ?? false),
+        'is_active' => (bool) $user?->is_active,
+        'force_logout_message' => $user && ! $user->is_active
+            ? "Votre compte a été désactivé par l'administrateur. Vous allez être déconnecté."
+            : null,
     ];
 }
 
@@ -1900,6 +2356,189 @@ function adminStatusBadge(?string $status): string
     return '<span class="badge '.$class.'" style="align-items:center;justify-self:start;width:max-content;max-width:100%;white-space:nowrap">'.e($status).'</span>';
 }
 
+function exportDataset(Business $business, string $type): array
+{
+    abort_unless(in_array($type, ['products', 'sales', 'expenses', 'customers', 'receivables', 'supplier-debts', 'employees', 'payrolls'], true), 404);
+
+    if ($type === 'products') {
+        return [
+            'title' => 'Rapport produits',
+            'headers' => ['Produit', 'Catégorie', 'Unité', 'Stock', 'Seuil', 'Prix achat', 'Prix vente'],
+            'rows' => Product::query()
+                ->where('business_id', $business->id)
+                ->with('category')
+                ->get()
+                ->map(fn ($product) => [
+                    $product->name,
+                    $product->category?->name ?: '',
+                    $product->unit,
+                    $product->stock_quantity,
+                    $product->alert_threshold,
+                    $product->purchase_price,
+                    $product->sale_price,
+                ]),
+        ];
+    }
+
+    if ($type === 'sales') {
+        return [
+            'title' => 'Rapport ventes',
+            'headers' => ['Facture', 'Vendeur', 'Client', 'Paiement', 'Statut', 'Sous-total', 'Remise', 'Total', 'Date'],
+            'rows' => Sale::query()
+                ->where('business_id', $business->id)
+                ->with(['customer', 'seller:id,name,phone'])
+                ->latest()
+                ->get()
+                ->map(fn ($sale) => [
+                    $sale->number,
+                    $sale->seller?->name ?: '',
+                    $sale->customer?->name ?: '',
+                    paymentLabel($sale->payment_method),
+                    $sale->status,
+                    $sale->subtotal,
+                    $sale->discount,
+                    $sale->total,
+                    optional($sale->sold_at)->format('d/m/Y H:i'),
+                ]),
+        ];
+    }
+
+    if ($type === 'customers') {
+        return [
+            'title' => 'Rapport clients',
+            'headers' => ['Client', 'Téléphone', 'Email', 'Création'],
+            'rows' => Customer::query()
+                ->where('business_id', $business->id)
+                ->latest()
+                ->get()
+                ->map(fn ($customer) => [
+                    $customer->name,
+                    $customer->phone,
+                    $customer->email,
+                    optional($customer->created_at)->format('d/m/Y H:i'),
+                ]),
+        ];
+    }
+
+    if ($type === 'receivables') {
+        return [
+            'title' => 'Rapport créances',
+            'headers' => ['Client', 'Montant dû', 'Payé', 'Reste', 'Échéance', 'Statut', 'Notes'],
+            'rows' => Receivable::query()
+                ->where('business_id', $business->id)
+                ->with('customer')
+                ->latest()
+                ->get()
+                ->map(fn ($receivable) => [
+                    $receivable->customer?->name ?: '',
+                    $receivable->amount_due,
+                    $receivable->amount_paid,
+                    max(0, $receivable->amount_due - $receivable->amount_paid),
+                    optional($receivable->due_date)->format('d/m/Y'),
+                    $receivable->status,
+                    $receivable->notes,
+                ]),
+        ];
+    }
+
+    if ($type === 'supplier-debts') {
+        return [
+            'title' => 'Rapport dettes fournisseurs',
+            'headers' => ['Fournisseur', 'Montant dû', 'Payé', 'Reste', 'Échéance', 'Statut', 'Notes'],
+            'rows' => SupplierDebt::query()
+                ->where('business_id', $business->id)
+                ->with('supplier')
+                ->latest()
+                ->get()
+                ->map(fn ($debt) => [
+                    $debt->supplier?->name ?: '',
+                    $debt->amount_due,
+                    $debt->amount_paid,
+                    max(0, $debt->amount_due - $debt->amount_paid),
+                    optional($debt->due_date)->format('d/m/Y'),
+                    $debt->status,
+                    $debt->notes,
+                ]),
+        ];
+    }
+
+    if ($type === 'employees') {
+        return [
+            'title' => 'Rapport employés',
+            'headers' => ['Employé', 'Poste', 'Type', 'Téléphone', 'Salaire', 'Date paiement salaire', 'Embauche'],
+            'rows' => Employee::query()
+                ->where('business_id', $business->id)
+                ->with('user:id,name,phone')
+                ->latest()
+                ->get()
+                ->map(fn ($employee) => [
+                    $employee->name,
+                    $employee->position,
+                    $employee->type,
+                    $employee->user?->phone ?: '',
+                    $employee->salary,
+                salaryPaymentDayMonth($employee->salary_payment_date),
+                    optional($employee->hired_at)->format('d/m/Y'),
+                ]),
+        ];
+    }
+
+    if ($type === 'payrolls') {
+        return [
+            'title' => 'Rapport paies',
+            'headers' => ['Période', 'Employé', 'Brut', 'Avance', 'Net', 'Statut', 'Paiement'],
+            'rows' => Payroll::query()
+                ->where('business_id', $business->id)
+                ->with('employee')
+                ->latest()
+                ->get()
+                ->map(fn ($payroll) => [
+                    $payroll->period,
+                    $payroll->employee?->name ?: '',
+                    $payroll->gross_salary,
+                    $payroll->salary_advance,
+                    $payroll->net_salary,
+                    $payroll->status,
+                    optional($payroll->paid_at)->format('d/m/Y H:i'),
+                ]),
+        ];
+    }
+
+    return [
+        'title' => 'Rapport charges',
+        'headers' => ['Charge', 'Catégorie', 'Type', 'Montant', 'Date', 'Notes'],
+        'rows' => Expense::query()
+            ->where('business_id', $business->id)
+            ->latest('spent_on')
+            ->get()
+            ->map(fn ($expense) => [
+                $expense->name,
+                $expense->category,
+                $expense->type,
+                $expense->amount,
+                optional($expense->spent_on)->format('d/m/Y'),
+                $expense->notes,
+            ]),
+    ];
+}
+
+function printableDatasetResponse(Business $business, string $title, array $headers, $rows)
+{
+    $branding = documentBranding($business);
+    $headerCells = collect($headers)->map(fn ($header) => '<th>'.e($header).'</th>')->implode('');
+    $bodyRows = collect($rows)->map(function ($row) {
+        return '<tr>'.collect($row)->map(fn ($cell) => '<td>'.e((string) $cell).'</td>')->implode('').'</tr>';
+    })->implode('');
+
+    if ($bodyRows === '') {
+        $bodyRows = '<tr><td colspan="'.count($headers).'">Aucune donnée disponible.</td></tr>';
+    }
+
+    $html = '<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'.e($title).' - EasyMarket</title><style>@import url("https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800;900&display=swap");:root{--primary:'.e($branding['primary_color']).';--accent:'.e($branding['secondary_color']).';--ink:#17211b;--muted:#3f5048;--line:#dfe7e2;--paper:#f6faf8}*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font-family:Poppins,Arial,sans-serif}.toolbar{position:sticky;top:0;background:var(--primary);color:white;padding:12px 20px;display:flex;justify-content:space-between;gap:12px}.btn{border:0;border-radius:8px;background:var(--accent);color:white;padding:10px 14px;font-weight:700}.sheet{width:min(1040px,calc(100% - 24px));min-height:calc(100vh - 48px);margin:24px auto;background:white;border:1px solid var(--line);border-radius:10px;padding:34px;box-shadow:0 20px 55px rgba(25,59,50,.12);display:flex;flex-direction:column}.head{border-bottom:2px solid var(--primary);padding-bottom:18px;margin-bottom:20px}.doc-brand{display:flex;align-items:flex-start;gap:14px}.doc-brand img{width:62px;height:62px;object-fit:contain;border:1px solid var(--line);border-radius:8px;padding:5px}.doc-brand h1{margin:0 0 6px}.doc-brand p{margin:2px 0;color:var(--muted)}h2{margin:0 0 14px}table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid var(--line);padding:10px 8px;text-align:left;vertical-align:top}th{color:var(--primary);font-size:13px}.footer{margin-top:auto;padding-top:14px;border-top:1px solid var(--line);color:var(--muted);text-align:center;font-size:12px}@media print{body{background:white}.toolbar{display:none}.sheet{width:100%;min-height:100vh;margin:0;border:0;box-shadow:none;border-radius:0}}</style></head><body><div class="toolbar"><strong>'.e($title).'</strong><button class="btn" onclick="window.print()">Imprimer / PDF</button></div><main class="sheet"><section class="head">'.$branding['header_html'].'</section><h2>'.e($title).'</h2><table><thead><tr>'.$headerCells.'</tr></thead><tbody>'.$bodyRows.'</tbody></table><p class="footer">Document généré par l\'application Easy_Market.</p></main></body></html>';
+
+    return response($html)->header('Content-Type', 'text/html; charset=UTF-8');
+}
+
 function csvResponse(string $filename, array $header, $rows)
 {
     $handle = fopen('php://temp', 'r+');
@@ -1991,12 +2630,103 @@ function paymentLabel(string $method): string
     ][$method] ?? $method;
 }
 
-function reportRange(string $period): array
+function employeeTypeLabel(?string $type): string
 {
+    return [
+        'seller' => 'Vendeur',
+        'cashier' => 'Caissier',
+        'accountant' => 'Comptable',
+        'observer' => 'Observateur',
+    ][$type] ?? trim((string) $type);
+}
+
+function documentColor(?string $color, string $fallback): string
+{
+    return preg_match('/^#[0-9A-Fa-f]{6}$/', (string) $color) ? (string) $color : $fallback;
+}
+
+function documentLogoUrl(Business $business): string
+{
+    if (! $business->show_logo_on_documents || ! $business->logo_path) {
+        return '';
+    }
+
+    $logoPath = (string) $business->logo_path;
+    if (Str::startsWith($logoPath, ['http://', 'https://', '/'])) {
+        return $logoPath;
+    }
+
+    return asset('storage/'.$logoPath);
+}
+
+function documentBranding(Business $business): array
+{
+    $details = array_values(array_filter([
+        $business->phone ? 'Tél. '.$business->phone : '',
+        $business->whatsapp_phone ? 'WhatsApp : '.$business->whatsapp_phone : '',
+        $business->show_address_on_documents && $business->address ? $business->address : '',
+        $business->show_ifu_on_documents && $business->ifu ? 'IFU : '.$business->ifu : '',
+        $business->show_slogan_on_documents && $business->slogan ? $business->slogan : '',
+    ]));
+    $logoUrl = documentLogoUrl($business);
+    $logoHtml = $logoUrl ? '<img src="'.e($logoUrl).'" alt="Logo '.e($business->name).'">' : '';
+    $detailsHtml = collect($details)->map(fn ($item) => '<p class="muted">'.e($item).'</p>')->implode('');
+
+    return [
+        'primary_color' => documentColor($business->primary_color, '#193b32'),
+        'secondary_color' => documentColor($business->secondary_color, '#f5b84b'),
+        'header_html' => '<div class="doc-brand">'.$logoHtml.'<div><h1>'.e($business->name).'</h1>'.$detailsHtml.'</div></div>',
+    ];
+}
+
+function documentCsvHeaderRows(Business $business): array
+{
+    $rows = [
+        ['Boutique', $business->name],
+    ];
+
+    if ($business->phone) {
+        $rows[] = ['Téléphone', $business->phone];
+    }
+
+    if ($business->whatsapp_phone) {
+        $rows[] = ['WhatsApp', $business->whatsapp_phone];
+    }
+
+    if ($business->show_address_on_documents && $business->address) {
+        $rows[] = ['Adresse', $business->address];
+    }
+
+    if ($business->show_ifu_on_documents && $business->ifu) {
+        $rows[] = ['IFU', $business->ifu];
+    }
+
+    if ($business->show_slogan_on_documents && $business->slogan) {
+        $rows[] = ['Slogan', $business->slogan];
+    }
+
+    $rows[] = [];
+
+    return $rows;
+}
+
+function reportRange(string $period, ?Request $request = null): array
+{
+    if ($period === 'custom') {
+        $start = $request?->date('start')?->startOfDay();
+        $end = $request?->date('end')?->endOfDay();
+
+        abort_unless($start && $end && $start->lte($end), 422, 'Période de rapport invalide.');
+
+        return [$start, $end];
+    }
+
     return match ($period) {
         'daily' => [now()->startOfDay(), now()->endOfDay()],
         'weekly' => [now()->startOfWeek(), now()->endOfWeek()],
         'monthly' => [now()->startOfMonth(), now()->endOfMonth()],
+        'quarterly' => [now()->startOfQuarter(), now()->endOfQuarter()],
+        'yearly' => [now()->startOfYear(), now()->endOfYear()],
     };
 }
 
@@ -2015,7 +2745,7 @@ function reportData(Business $business, $start, $end, string $period): array
 
     $payrollsTotal = (int) Payroll::query()
         ->where('business_id', $business->id)
-        ->where('period', $start->format('Y-m'))
+        ->whereBetween('period', [$start->format('Y-m'), $end->format('Y-m')])
         ->sum('net_salary');
 
     $receivablesRemaining = (int) Receivable::query()
@@ -2028,9 +2758,33 @@ function reportData(Business $business, $start, $end, string $period): array
         ->selectRaw('COALESCE(SUM(amount_due - amount_paid), 0) as total')
         ->value('total');
 
+    $stockValue = (int) Product::query()
+        ->where('business_id', $business->id)
+        ->selectRaw('COALESCE(SUM(stock_quantity * purchase_price), 0) as total')
+        ->value('total');
+
+    $productsCount = Product::query()
+        ->where('business_id', $business->id)
+        ->where('stock_quantity', '>', 0)
+        ->count();
+
+    $receivablesCount = Receivable::query()
+        ->where('business_id', $business->id)
+        ->whereColumn('amount_paid', '<', 'amount_due')
+        ->count();
+
+    $debtsCount = SupplierDebt::query()
+        ->where('business_id', $business->id)
+        ->whereColumn('amount_paid', '<', 'amount_due')
+        ->count();
+
+    $balanceAssetsTotal = $stockValue + $receivablesRemaining;
+    $balanceEquityEstimate = $balanceAssetsTotal - $debtsRemaining;
+
     $topProducts = DB::table('sale_items')
         ->join('sales', 'sales.id', '=', 'sale_items.sale_id')
         ->where('sales.business_id', $business->id)
+        ->where('sales.status', 'completed')
         ->whereBetween('sales.sold_at', [$start, $end])
         ->select('sale_items.product_name')
         ->selectRaw('SUM(sale_items.quantity) as quantity')
@@ -2046,6 +2800,9 @@ function reportData(Business $business, $start, $end, string $period): array
             'daily' => 'Rapport journalier',
             'weekly' => 'Rapport hebdomadaire',
             'monthly' => 'Rapport mensuel',
+            'quarterly' => 'Rapport trimestriel',
+            'yearly' => 'Rapport annuel',
+            'custom' => 'Rapport personnalisé',
         ][$period],
         'range_label' => $start->format('d/m/Y').' - '.$end->format('d/m/Y'),
         'sales_total' => $salesTotal,
@@ -2054,6 +2811,12 @@ function reportData(Business $business, $start, $end, string $period): array
         'net_result' => $salesTotal - $expensesTotal - $payrollsTotal,
         'receivables_remaining' => $receivablesRemaining,
         'debts_remaining' => $debtsRemaining,
+        'stock_value' => $stockValue,
+        'products_count' => $productsCount,
+        'receivables_count' => $receivablesCount,
+        'debts_count' => $debtsCount,
+        'balance_assets_total' => $balanceAssetsTotal,
+        'balance_equity_estimate' => $balanceEquityEstimate,
         'top_products' => $topProducts,
     ];
 }

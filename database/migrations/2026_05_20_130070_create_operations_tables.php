@@ -28,8 +28,11 @@ return new class extends Migration
             $table->string('position');
             $table->string('type', 30)->default('seller');
             $table->unsignedInteger('salary')->default(0);
+            $table->date('salary_payment_date')->nullable();
             $table->date('hired_at')->nullable();
             $table->boolean('is_active')->default(true);
+            $table->timestamp('banned_at')->nullable();
+            $table->text('ban_reason')->nullable();
             $table->timestamps();
         });
 
