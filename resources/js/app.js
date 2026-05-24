@@ -16,5 +16,6 @@ if (dashboardRoot) {
         businessId: dashboardRoot.dataset.businessId,
         csrfToken: dashboardRoot.dataset.csrfToken,
         initialSection: dashboardRoot.dataset.section,
+        initialUserRole: dashboardRoot.dataset.userRole,
     }).mount(dashboardRoot);
 }

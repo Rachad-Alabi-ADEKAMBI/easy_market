@@ -1,7 +1,7 @@
 ﻿<template>
     <div class="dashboard-layout">
         <button
-            class="dashboard-menu-toggle"
+            :class="['dashboard-menu-toggle', { 'sidebar-toggle-open': sidebarOpen }]"
             type="button"
             :aria-label="sidebarOpen ? 'Fermer le menu' : 'Ouvrir le menu'"
             @click="sidebarOpen = !sidebarOpen"
@@ -14,43 +14,119 @@
                 <span>{{ toast.message }}</span>
             </div>
         </div>
+        <div v-if="showSaleValidationModal" class="modal-backdrop" @click.self="closeSaleValidationModal">
+            <section class="choice-modal danger-modal">
+                <div class="section-title">
+                    <div>
+                        <h2 class="danger-modal-title"><i class="fa-solid fa-triangle-exclamation"></i>Facture incomplète</h2>
+                        <p>Complétez les champs suivants avant de valider.</p>
+                    </div>
+                    <button class="table-icon" type="button" @click="closeSaleValidationModal" title="Fermer" aria-label="Fermer">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+                <div class="payment-history">
+                    <div v-for="error in saleValidationErrors" :key="error" class="payment-history-row">
+                        <div>
+                            <strong>{{ error }}</strong>
+                        </div>
+                    </div>
+                </div>
+                <div class="choice-actions">
+                    <button class="btn btn-danger" type="button" @click="closeSaleValidationModal">
+                        <i class="fa-solid fa-check"></i>Compris
+                    </button>
+                </div>
+            </section>
+        </div>
         <div v-if="sidebarOpen" class="sidebar-backdrop" @click="sidebarOpen = false"></div>
         <aside :class="['sidebar', { 'sidebar-open': sidebarOpen }]">
-            <a class="brand" href="/">
-                <span class="logo">
-                    <img v-if="businessSidebarLogoUrl" :src="businessSidebarLogoUrl" alt="Logo boutique">
-                    <template v-else>EM</template>
-                </span>
-                <span>EasyMarket</span>
-            </a>
+            <div class="sidebar-header">
+                <a class="brand" href="/">
+                    <span class="logo">
+                        <img v-if="businessSidebarLogoUrl" :src="businessSidebarLogoUrl" alt="Logo boutique">
+                        <template v-else>{{ businessInitial }}</template>
+                    </span>
+                    <span class="brand-text">
+                        <strong>{{ business?.name || 'Boutique' }}</strong>
+                    </span>
+                </a>
+                <button class="sidebar-close-button" type="button" @click="sidebarOpen = false" title="Fermer le menu" aria-label="Fermer le menu">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
             <nav class="side-nav">
-                <a href="/"><i class="fa-solid fa-house"></i>Accueil</a>
                 <template v-if="currentUserCanSell">
-                    <a :class="{ active: activeSection === 'seller-cashier' }" :href="sectionUrl('caisse')"><i class="fa-solid fa-cash-register"></i>Caisse</a>
-                    <a :class="{ active: activeSection === 'seller-proforma' }" :href="sectionUrl('proforma')"><i class="fa-solid fa-file-lines"></i>Proforma</a>
-                    <a :class="{ active: activeSection === 'seller-sales' }" :href="sectionUrl('mes-ventes')"><i class="fa-solid fa-receipt"></i>Mes ventes</a>
-                    <a :class="{ active: activeSection === 'seller-products' }" :href="sectionUrl('produits')"><i class="fa-solid fa-boxes-stacked"></i>Produits</a>
+                    <a v-if="!isCompactNav" class="mobile-bottom-source" :class="{ active: activeSection === 'seller-cashier' }" :href="sectionUrl('caisse')"><i class="fa-solid fa-cash-register"></i>Vente & Proforma</a>
+                    <a :class="{ active: activeSection === 'services' }" :href="sectionUrl('services')"><i class="fa-solid fa-bell-concierge"></i>Services</a>
+                    <a v-if="!isCompactNav" class="mobile-bottom-source" :class="{ active: activeSection === 'seller-sales' }" :href="sectionUrl('mes-ventes')"><i class="fa-solid fa-receipt"></i>Mes ventes</a>
+                    <a v-if="!isCompactNav" class="mobile-bottom-source" :class="{ active: activeSection === 'seller-products' }" :href="sectionUrl('produits')"><i class="fa-solid fa-boxes-stacked"></i>Produits</a>
                     <a :class="{ active: activeSection === 'seller-profile' }" :href="sectionUrl('profil')"><i class="fa-solid fa-user-gear"></i>Profil</a>
                 </template>
                 <template v-else>
+                    <a :class="{ active: activeSection === 'dashboard' }" :href="sectionUrl('tableau-de-bord')"><i class="fa-solid fa-chart-line"></i>Tableau de bord</a>
+                    <a v-if="!isCompactNav" class="mobile-bottom-source" :class="{ active: activeSection === 'admin-sale-proforma' }" :href="sectionUrl('vente-proforma')"><i class="fa-solid fa-cash-register"></i>Vente & Proforma</a>
+                    <a :class="{ active: activeSection === 'services' }" :href="sectionUrl('services')"><i class="fa-solid fa-bell-concierge"></i>Services</a>
+                    <a v-if="!isCompactNav" class="mobile-bottom-source" :class="{ active: activeSection === 'sales' }" :href="sectionUrl('ventes')"><i class="fa-solid fa-file-invoice"></i>Factures</a>
+                    <a v-if="!isCompactNav" class="mobile-bottom-source" :class="{ active: activeSection === 'stocks' }" :href="sectionUrl('stocks')"><i class="fa-solid fa-boxes-stacked"></i>Stocks & Historique</a>
+                    <a v-if="!isCompactNav" class="mobile-bottom-source" :class="{ active: activeSection === 'customers' }" :href="sectionUrl('clients')"><i class="fa-solid fa-users"></i>Clients & créances</a>
+                    <a v-if="!isCompactNav" class="mobile-bottom-source" :class="{ active: activeSection === 'suppliers' }" :href="sectionUrl('fournisseurs')"><i class="fa-solid fa-truck"></i>Fournisseurs & dettes</a>
                     <a :class="{ active: activeSection === 'expenses' }" :href="sectionUrl('charges')"><i class="fa-solid fa-wallet"></i>Charges</a>
-                    <a :class="{ active: activeSection === 'customers' }" :href="sectionUrl('clients')"><i class="fa-solid fa-users"></i>Clients & créances</a>
-                    <a :class="{ active: activeSection === 'sales' }" :href="sectionUrl('ventes')"><i class="fa-solid fa-cash-register"></i>Factures & ventes</a>
-                    <a :class="{ active: activeSection === 'suppliers' }" :href="sectionUrl('fournisseurs')"><i class="fa-solid fa-truck"></i>Fournisseurs & dettes</a>
+                    <a :class="{ active: activeSection === 'employees' }" :href="sectionUrl('personnel')"><i class="fa-solid fa-user-tie"></i>Personnel & paie</a>
+                    <a :class="{ active: activeSection === 'reports' }" :href="sectionUrl('rapports')"><i class="fa-solid fa-chart-column"></i>Rapports</a>
                     <a :class="{ active: activeSection === 'taxes' }" :href="sectionUrl('impots')"><i class="fa-solid fa-file-invoice-dollar"></i>Impôts & comptabilité</a>
                     <a :class="{ active: activeSection === 'notifications' }" :href="sectionUrl('notifications')"><i class="fa-solid fa-bell"></i>Notifications{{ unreadNotifications ? ` (${unreadNotifications})` : '' }}</a>
                     <a :class="{ active: activeSection === 'settings' }" :href="sectionUrl('parametres')"><i class="fa-solid fa-gear"></i>Paramètres</a>
-                    <a :class="{ active: activeSection === 'employees' }" :href="sectionUrl('personnel')"><i class="fa-solid fa-user-tie"></i>Personnel & paie</a>
-                    <a :class="{ active: activeSection === 'reports' }" :href="sectionUrl('rapports')"><i class="fa-solid fa-chart-column"></i>Rapports</a>
-                    <a :class="{ active: activeSection === 'stocks' }" :href="sectionUrl('stocks')"><i class="fa-solid fa-boxes-stacked"></i>Stocks</a>
-                    <a :class="{ active: activeSection === 'dashboard' }" :href="sectionUrl('tableau-de-bord')"><i class="fa-solid fa-chart-line"></i>Tableau de bord</a>
                 </template>
+                <a href="/"><i class="fa-solid fa-house"></i>Accueil</a>
+                <form class="sidebar-logout" method="post" action="/deconnexion">
+                    <input type="hidden" name="_token" :value="csrfToken">
+                    <button type="submit"><i class="fa-solid fa-right-from-bracket"></i>Déconnexion</button>
+                </form>
             </nav>
-            <form class="sidebar-logout" method="post" action="/deconnexion">
-                <input type="hidden" name="_token" :value="csrfToken">
-                <button type="submit"><i class="fa-solid fa-right-from-bracket"></i>Déconnexion</button>
-            </form>
         </aside>
+
+        <nav v-if="!currentUserCanSell" class="mobile-bottom-nav" aria-label="Navigation mobile principale">
+            <a :class="{ active: activeSection === 'stocks' }" :href="sectionUrl('stocks')">
+                <i class="fa-solid fa-boxes-stacked"></i>
+                <span>Stocks & Historiques</span>
+            </a>
+            <a :class="{ active: activeSection === 'sales' }" :href="sectionUrl('ventes')">
+                <i class="fa-solid fa-file-invoice"></i>
+                <span>Factures</span>
+            </a>
+            <a class="primary-mobile-link" :class="{ active: activeSection === 'admin-sale-proforma' }" :href="sectionUrl('vente-proforma')">
+                <i class="fa-solid fa-cash-register"></i>
+                <span>Vente & Proforma</span>
+            </a>
+            <a :class="{ active: activeSection === 'customers' }" :href="sectionUrl('clients')">
+                <i class="fa-solid fa-users"></i>
+                <span>Clients & Créances</span>
+            </a>
+            <a :class="{ active: activeSection === 'suppliers' }" :href="sectionUrl('fournisseurs')">
+                <i class="fa-solid fa-truck"></i>
+                <span>Fournisseurs & dettes</span>
+            </a>
+        </nav>
+
+        <nav v-else class="mobile-bottom-nav seller-mobile-bottom-nav" aria-label="Navigation mobile vendeur">
+            <a :class="{ active: activeSection === 'seller-products' }" :href="sectionUrl('produits')">
+                <i class="fa-solid fa-boxes-stacked"></i>
+                <span>Produits</span>
+            </a>
+            <a :class="{ active: activeSection === 'seller-cashier' }" :href="sectionUrl('caisse')">
+                <i class="fa-solid fa-cash-register"></i>
+                <span>Vente & Proforma</span>
+            </a>
+            <a :class="{ active: activeSection === 'services' }" :href="sectionUrl('services')">
+                <i class="fa-solid fa-bell-concierge"></i>
+                <span>Services</span>
+            </a>
+            <a :class="{ active: activeSection === 'seller-sales' }" :href="sectionUrl('mes-ventes')">
+                <i class="fa-solid fa-receipt"></i>
+                <span>Mes ventes</span>
+            </a>
+        </nav>
 
         <main :class="['main', { 'main-locked': !subscriptionActive }]">
             <div v-if="showSubscriptionModal" class="activation-overlay">
@@ -74,7 +150,7 @@
                             </div>
                             <div>
                                 <span>Numéro dépôt</span>
-                                <strong>{{ subscription?.deposit_phone || subscription?.payment_reference || '-' }}</strong>
+                                <strong>{{ subscription?.deposit_phone ? formatPhoneDisplay(subscription.deposit_phone) : (subscription?.payment_reference || '-') }}</strong>
                             </div>
                         </div>
                     </div>
@@ -139,7 +215,12 @@
 
             <header class="top">
                 <div>
-                    <h1>{{ pageTitle }}</h1>
+                    <div class="page-heading-row">
+                        <h1>{{ pageTitle }}</h1>
+                        <button class="page-help-button" type="button" @click="showPageHelpModal = true" title="Aide sur cette page" aria-label="Aide sur cette page">
+                            <i class="fa-solid fa-question"></i>
+                        </button>
+                    </div>
                     <p>{{ pageSubtitle }}</p>
                 </div>
                 <div class="top-actions">
@@ -152,6 +233,39 @@
                     </div>
                 </div>
             </header>
+
+            <div v-if="showPageHelpModal" class="modal-backdrop page-help-backdrop" @click.self="showPageHelpModal = false">
+                <section class="choice-modal page-help-modal">
+                    <div class="section-title">
+                        <div>
+                            <span class="badge"><i class="fa-solid fa-circle-question"></i>Aide de la page</span>
+                            <h2>{{ pageHelpContent.title }}</h2>
+                            <p>{{ pageHelpContent.intro }}</p>
+                        </div>
+                        <button class="table-icon" type="button" @click="showPageHelpModal = false" title="Fermer" aria-label="Fermer">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+                    <div class="page-help-body">
+                        <div>
+                            <h3>Ce que vous trouvez ici</h3>
+                            <ul>
+                                <li v-for="item in pageHelpContent.infos" :key="item"><i class="fa-solid fa-circle-check"></i>{{ item }}</li>
+                            </ul>
+                        </div>
+                        <div>
+                            <h3>Actions possibles</h3>
+                            <ul>
+                                <li v-for="item in pageHelpContent.actions" :key="item"><i class="fa-solid fa-bolt"></i>{{ item }}</li>
+                            </ul>
+                        </div>
+                        <div class="page-help-example">
+                            <h3>Exemple concret</h3>
+                            <p>{{ pageHelpContent.example }}</p>
+                        </div>
+                    </div>
+                </section>
+            </div>
 
             <section v-if="activeSection === 'notifications' && subscriptionPending" class="card activation-status-card">
                 <i class="fa-solid fa-clock"></i>
@@ -275,17 +389,17 @@
                     </div>
                 </div>
 
-                <form class="settings-form" enctype="multipart/form-data" @submit.prevent="saveSettings">
+                <form id="business-settings-form" class="settings-form" enctype="multipart/form-data" @submit.prevent="saveSettings">
                     <label>Nom de la boutique
                         <input v-model="settingsForm.name" class="readonly-input" type="text" readonly required>
                     </label>
-                    <label>Téléphone
+                    <label>Téléphone boutique
                         <span class="phone-field">
                             <span>01</span>
                             <input :value="phoneInputValue(settingsForm.phone)" type="tel" required inputmode="numeric" maxlength="8" pattern="\d{8}" placeholder="96228860" @input="settingsForm.phone = phoneWithPrefix($event.target.value)">
                         </span>
                     </label>
-                    <label>Téléphone WhatsApp
+                    <label>WhatsApp boutique
                         <span class="phone-field">
                             <span>01</span>
                             <input :value="phoneInputValue(settingsForm.whatsapp_phone)" type="tel" inputmode="numeric" maxlength="8" pattern="\d{8}" placeholder="96228860" @input="settingsForm.whatsapp_phone = optionalPhoneWithPrefix($event.target.value)">
@@ -300,111 +414,260 @@
                     <label>Slogan
                         <input v-model="settingsForm.slogan" type="text">
                     </label>
+                    <label class="full">Description de la boutique
+                        <textarea v-model="settingsForm.description" rows="3" placeholder="Présentez brièvement l'activité, les produits ou les services de la boutique."></textarea>
+                    </label>
                     <label class="full">Logo de la boutique
                         <div class="logo-upload-row">
                             <div class="logo-preview">
                                 <img v-if="settingsLogoUrl" :src="settingsLogoUrl" alt="Logo boutique">
                                 <span v-else>EM</span>
                             </div>
-                            <input type="file" accept="image/*" @change="onSettingsLogoChange">
+                            <div class="logo-upload-actions">
+                                <input type="file" accept="image/*" @change="onSettingsLogoChange">
+                                <div class="row-actions">
+                                    <button v-if="settingsLogoPreview" class="btn btn-light" type="button" @click="openLogoCropModal"><i class="fa-solid fa-crop-simple"></i>Rogner</button>
+                                    <button v-if="settingsLogoUrl" class="btn btn-danger" type="button" @click="removeSettingsLogo"><i class="fa-solid fa-trash"></i>Supprimer le logo</button>
+                                </div>
+                            </div>
                         </div>
                     </label>
-                    <label class="full">Couleur principale (cliquez sur la couleur pour la modifier)
-                        <div class="color-field">
-                            <input v-model="settingsForm.primary_color" type="color">
-                            <input v-model="settingsForm.primary_color" type="text" maxlength="7" placeholder="#2f7d69">
-                        </div>
-                    </label>
-                    <div class="settings-color-panel full">
-                        <div>
-                            <strong>Couleur secondaire</strong>
-                            <span>Choisissez une couleur qui accompagne bien la couleur principale.</span>
-                        </div>
-                        <div class="color-field">
-                            <input v-model="settingsForm.secondary_color" type="color">
-                            <input v-model="settingsForm.secondary_color" type="text" maxlength="7" placeholder="#f5b84b">
-                        </div>
-                        <div class="color-suggestions">
-                            <button
-                                v-for="color in secondaryColorSuggestions"
-                                :key="color"
-                                type="button"
-                                :class="{ selected: settingsForm.secondary_color?.toLowerCase() === color.toLowerCase() }"
-                                :style="{ backgroundColor: color }"
-                                @click="settingsForm.secondary_color = color"
-                                :title="color"
-                                :aria-label="`Choisir ${color}`"
-                            >
-                                <span>{{ color }}</span>
-                            </button>
-                        </div>
-                        <button class="btn btn-light color-reset-btn" type="button" @click="resetDefaultColors">
-                            <i class="fa-solid fa-rotate-left"></i>Revenir aux paramètres par défaut
-                        </button>
-                    </div>
                     <div class="settings-checks full">
                         <strong>Informations à afficher sur les factures et vos documents</strong>
                         <label><input v-model="settingsForm.show_logo_on_documents" type="checkbox">Logo</label>
                         <label><input v-model="settingsForm.show_ifu_on_documents" type="checkbox">IFU</label>
                         <label><input v-model="settingsForm.show_slogan_on_documents" type="checkbox">Slogan</label>
+                        <label><input v-model="settingsForm.show_description_on_documents" type="checkbox">Description</label>
+                        <label><input v-model="settingsForm.show_phone_on_documents" type="checkbox">Téléphone boutique</label>
+                        <label><input v-model="settingsForm.show_whatsapp_on_documents" type="checkbox">WhatsApp boutique</label>
                         <label><input v-model="settingsForm.show_address_on_documents" type="checkbox">Adresse</label>
                     </div>
-                    <button class="btn settings-save-btn" type="submit" :style="settingsPrimaryButtonStyle" :disabled="savingSettings">
+                    <div class="settings-checks full">
+                        <strong>Rapports automatiques WhatsApp</strong>
+                        <label><input v-model="settingsForm.whatsapp_reports_enabled" type="checkbox">Recevoir automatiquement les rapports sur WhatsApp</label>
+                    </div>
+                    <label>Heure d’envoi
+                        <input v-model="settingsForm.whatsapp_report_time" type="time" :required="settingsForm.whatsapp_reports_enabled" :disabled="!settingsForm.whatsapp_reports_enabled">
+                    </label>
+                    <label>Type de rapport
+                        <select v-model="settingsForm.whatsapp_report_type" :disabled="!settingsForm.whatsapp_reports_enabled">
+                            <option value="global">Rapport global</option>
+                            <option value="sales">Rapport des ventes</option>
+                            <option value="stock">Rapport du stock</option>
+                            <option value="receivables">Rapport des créances</option>
+                            <option value="supplier_debts">Rapport des dettes fournisseurs</option>
+                            <option value="expenses">Rapport des charges</option>
+                            <option value="taxes">Bilan impôts & comptabilité</option>
+                        </select>
+                    </label>
+                    <label>Numéro whatsApp pour recevoir les rapports
+                        <span class="phone-field">
+                            <span>01</span>
+                            <input :value="phoneInputValue(settingsForm.whatsapp_report_phone)" type="tel" inputmode="numeric" maxlength="8" pattern="\d{8}" placeholder="96228860" :required="settingsForm.whatsapp_reports_enabled" :disabled="!settingsForm.whatsapp_reports_enabled" @input="settingsForm.whatsapp_report_phone = optionalPhoneWithPrefix($event.target.value)">
+                        </span>
+                    </label>
+                    <button class="btn settings-save-btn" type="submit" :disabled="savingSettings">
                         <i class="fa-solid fa-floppy-disk"></i>{{ savingSettings ? 'Enregistrement...' : 'Enregistrer les paramètres' }}
                     </button>
                 </form>
                 <p v-if="settingsMessage" class="message">{{ settingsMessage }}</p>
             </section>
 
-            <section v-if="sellerCheckoutActive" class="content-grid">
+            <div v-if="showLogoCropModal" class="modal-backdrop" @click.self="closeLogoCropModal">
+                <section class="choice-modal logo-crop-modal">
+                    <div class="section-title">
+                        <div>
+                            <h2><i class="fa-solid fa-crop-simple"></i>Rogner le logo</h2>
+                            <p>Ajustez le logo dans le cadre carré avant d’enregistrer.</p>
+                        </div>
+                        <button class="table-icon" type="button" @click="closeLogoCropModal" title="Fermer" aria-label="Fermer">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+                    <div class="logo-crop-frame">
+                        <img :src="logoCropImageUrl" alt="Logo à rogner" :style="logoCropImageStyle">
+                    </div>
+                    <div class="logo-crop-controls">
+                        <label>Zoom
+                            <input v-model.number="logoCrop.zoom" type="range" min="1" max="3" step="0.05">
+                        </label>
+                        <label>Horizontal
+                            <input v-model.number="logoCrop.x" type="range" min="-100" max="100" step="1">
+                        </label>
+                        <label>Vertical
+                            <input v-model.number="logoCrop.y" type="range" min="-100" max="100" step="1">
+                        </label>
+                    </div>
+                    <div class="choice-actions">
+                        <button class="btn btn-light" type="button" @click="closeLogoCropModal"><i class="fa-solid fa-xmark"></i>Annuler</button>
+                        <button class="btn btn-primary" type="button" @click="applyLogoCrop"><i class="fa-solid fa-check"></i>Appliquer</button>
+                    </div>
+                </section>
+            </div>
+
+            <section v-if="activeSection === 'settings'" class="card">
+                <div class="section-title">
+                    <div>
+                        <h2>Paramètres du compte</h2>
+                        <p>Modifiez vos coordonnées personnelles et le mot de passe du compte administrateur.</p>
+                    </div>
+                </div>
+                <div class="settings-form account-contact-form">
+                    <label>Téléphone utilisateur
+                        <span class="phone-field">
+                            <span>01</span>
+                            <input form="business-settings-form" :value="phoneInputValue(settingsForm.user_phone)" type="tel" required inputmode="numeric" maxlength="8" pattern="\d{8}" placeholder="96228860" @input="settingsForm.user_phone = phoneWithPrefix($event.target.value)">
+                        </span>
+                    </label>
+                    <label>WhatsApp utilisateur
+                        <span class="phone-field">
+                            <span>01</span>
+                            <input form="business-settings-form" :value="phoneInputValue(settingsForm.user_whatsapp_phone)" type="tel" inputmode="numeric" maxlength="8" pattern="\d{8}" placeholder="96228860" @input="settingsForm.user_whatsapp_phone = optionalPhoneWithPrefix($event.target.value)">
+                        </span>
+                    </label>
+                    <div class="choice-actions full">
+                        <button form="business-settings-form" class="btn btn-light" type="submit" :disabled="savingSettings">
+                            <i class="fa-solid fa-floppy-disk"></i>{{ savingSettings ? 'Enregistrement...' : 'Enregistrer les coordonnées' }}
+                        </button>
+                    </div>
+                </div>
+                <form class="payment-modal-form profile-password-form" @submit.prevent="changeProfilePassword">
+                    <label>Mot de passe actuel
+                        <span class="password-field">
+                            <input v-model="profilePasswordForm.current_password" :type="showProfileCurrentPassword ? 'text' : 'password'" required autocomplete="current-password">
+                            <button type="button" @click="showProfileCurrentPassword = !showProfileCurrentPassword" :title="showProfileCurrentPassword ? 'Masquer' : 'Afficher'" :aria-label="showProfileCurrentPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'">
+                                <i :class="showProfileCurrentPassword ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye'"></i>
+                            </button>
+                        </span>
+                    </label>
+                    <label>Nouveau mot de passe
+                        <span class="password-field">
+                            <input v-model="profilePasswordForm.password" :type="showProfilePassword ? 'text' : 'password'" required minlength="8" autocomplete="new-password">
+                            <button type="button" @click="showProfilePassword = !showProfilePassword" :title="showProfilePassword ? 'Masquer' : 'Afficher'" :aria-label="showProfilePassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'">
+                                <i :class="showProfilePassword ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye'"></i>
+                            </button>
+                        </span>
+                    </label>
+                    <label>Confirmer le mot de passe
+                        <span class="password-field">
+                            <input v-model="profilePasswordForm.password_confirmation" :type="showProfilePasswordConfirmation ? 'text' : 'password'" required minlength="8" autocomplete="new-password">
+                            <button type="button" @click="showProfilePasswordConfirmation = !showProfilePasswordConfirmation" :title="showProfilePasswordConfirmation ? 'Masquer' : 'Afficher'" :aria-label="showProfilePasswordConfirmation ? 'Masquer le mot de passe' : 'Afficher le mot de passe'">
+                                <i :class="showProfilePasswordConfirmation ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye'"></i>
+                            </button>
+                        </span>
+                    </label>
+                    <div class="choice-actions full">
+                        <button class="btn btn-primary" type="submit" :disabled="savingProfilePassword">
+                            <i class="fa-solid fa-key"></i>{{ savingProfilePassword ? 'Modification...' : 'Modifier le mot de passe' }}
+                        </button>
+                    </div>
+                </form>
+                <p v-if="profileMessage" class="message">{{ profileMessage }}</p>
+            </section>
+
+            <div v-if="activeSection === 'admin-sale-proforma' || activeSection === 'seller-cashier'" class="customer-view-switch">
+                <button :class="['customer-switch-card', saleForm.type === 'invoice' ? 'active' : '']" type="button" @click="saleForm.type = 'invoice'">
+                    <i class="fa-solid fa-cash-register"></i>
+                    <span>Section vente</span>
+                    <strong>Facture</strong>
+                </button>
+                <button :class="['customer-switch-card', saleForm.type === 'proforma' ? 'active' : '']" type="button" @click="saleForm.type = 'proforma'">
+                    <i class="fa-solid fa-file-lines"></i>
+                    <span>Section proforma</span>
+                    <strong>Devis</strong>
+                </button>
+            </div>
+
+            <section v-if="sellerCheckoutActive" class="content-grid seller-sale-grid">
                 <article class="card">
                     <div class="section-title">
                         <div>
-                            <h2>{{ activeSection === 'seller-proforma' ? 'Nouvelle proforma' : 'Nouvelle vente' }}</h2>
-                            <p>{{ activeSection === 'seller-proforma' ? 'Préparez un devis sans mouvement de stock.' : 'Sélectionnez un produit, ajoutez-le au panier, puis validez la facture.' }}</p>
+                            <h2>{{ saleDraftIsProforma ? 'Nouvelle proforma' : 'Nouvelle vente' }}</h2>
+                            <p>{{ saleDraftIsProforma ? 'Préparez un devis sans mouvement de stock.' : 'Sélectionnez un produit, ajoutez-le au panier, puis validez la facture.' }}</p>
                         </div>
                     </div>
 
-                    <form class="sale-form" @submit.prevent="addSaleLine">
-                        <label>Produit
-                            <select v-model="saleLine.product_id" required>
-                                <option value="">Choisir un produit</option>
-                                <option v-for="product in availableProducts" :key="product.id" :value="product.id">
-                                    {{ product.name }} - {{ formatMoney(product.sale_price) }} - stock {{ product.stock_quantity }}
-                                </option>
-                            </select>
-                        </label>
-                        <label>Quantité
-                            <input v-model.number="saleLine.quantity" type="number" min="0.01" step="0.01" required>
-                        </label>
-                        <label>Remise
-                            <input v-model.number="saleLine.discount" type="number" min="0">
-                        </label>
-                        <button class="btn btn-light" type="submit"><i class="fa-solid fa-cart-plus"></i>Ajouter</button>
-                    </form>
-
-                    <div class="cart" v-if="cart.length">
-                        <div class="cart-row" v-for="(item, index) in cart" :key="index">
-                            <div>
-                                <strong>{{ item.product_name }}</strong>
-                                <small>{{ item.quantity }} x {{ formatMoney(item.unit_price) }}</small>
-                            </div>
-                            <span>{{ formatMoney(item.total) }}</span>
-                            <button type="button" @click="cart.splice(index, 1)" aria-label="Retirer"><i class="fa-solid fa-xmark"></i></button>
-                        </div>
-                    </div>
-
-                    <form class="checkout" @submit.prevent="saveSale">
-                        <label>Nom du client
-                            <input v-model="saleForm.customer_name" type="text" placeholder="Client comptoir">
-                        </label>
-                        <label>Téléphone client
-                            <span class="phone-field">
-                                <span>01</span>
-                                <input :value="phoneInputValue(saleForm.customer_phone)" type="tel" inputmode="numeric" maxlength="8" pattern="\d{8}" placeholder="Optionnel" @input="saleForm.customer_phone = optionalPhoneWithPrefix($event.target.value)">
+                    <form class="sale-form" @submit.prevent>
+                        <label class="sale-customer-field">Nom du client
+                            <span class="quick-entry-field customer-picker">
+                                <input
+                                    v-model="customerSearch"
+                                    type="search"
+                                    placeholder="Écrire ou rechercher un client"
+                                    autocomplete="off"
+                                    @input="syncSaleCustomerFromSearch"
+                                    @focus="showCustomerSuggestions = true"
+                                    @blur="hideSaleCustomerSuggestions"
+                                >
+                                <button v-if="canCreateSaleCustomer" class="btn btn-light" type="button" @click="openCustomerCreateModal(customerSearch, 'sale')" title="Ajouter un client">
+                                    <i class="fa-solid fa-user-plus"></i>Nouveau client
+                                </button>
+                                <div v-if="showCustomerSuggestions && filteredSaleCustomers.length" class="quick-suggestions">
+                                    <button v-for="customer in filteredSaleCustomers" :key="customer.id" type="button" @mousedown.prevent="selectSaleCustomer(customer)">
+                                        <span>{{ customer.name }}</span>
+                                        <small>{{ formatPhoneDisplay(customer.phone) || 'Téléphone non renseigné' }}</small>
+                                    </button>
+                                </div>
                             </span>
                         </label>
-                        <label>Mode de paiement
+                        <div class="sale-lines full">
+                            <div class="sale-line-row" v-for="(line, index) in saleLines" :key="line.key">
+                                <label>Produit
+                                    <input
+                                        v-model="line.product_search"
+                                        type="search"
+                                        placeholder="Écrire ou choisir un produit"
+                                        autocomplete="off"
+                                        required
+                                        @input="syncSaleLineProductFromSearch(index)"
+                                        @focus="line.show_suggestions = true"
+                                        @blur="hideSaleLineProductSuggestions(index)"
+                                    >
+                                    <div v-if="line.show_suggestions && filteredSaleLineProducts(index).length" class="quick-suggestions product-suggestions">
+                                        <button v-for="product in filteredSaleLineProducts(index)" :key="product.id" type="button" @mousedown.prevent="selectSaleLineProduct(index, product)">
+                                            <span>{{ product.name }}</span>
+                                            <small>{{ formatMoney(product.sale_price) }} - {{ formatStockQuantity(product.stock_quantity) }} restant</small>
+                                        </button>
+                                    </div>
+                                </label>
+                                <div class="sale-line-price">
+                                    <span>Prix unitaire</span>
+                                    <input
+                                        v-if="currentUser?.can_edit_prices"
+                                        v-model.number="line.unit_price"
+                                        type="number"
+                                        min="0"
+                                        @focus="ensureSaleLineCustomPrice(line)"
+                                    >
+                                    <strong
+                                        v-else
+                                        class="readonly-price"
+                                        role="button"
+                                        tabindex="0"
+                                        @click="showPriceEditDenied"
+                                        @keydown.enter.prevent="showPriceEditDenied"
+                                        @keydown.space.prevent="showPriceEditDenied"
+                                    >{{ formatMoney(saleLineUnitPrice(line)) }}</strong>
+                                </div>
+                                <label>Quantité
+                                    <input v-model.number="line.quantity" type="number" min="0.01" step="0.01" required @input="validateSaleLineQuantity(line)">
+                                </label>
+                                <div class="sale-line-total">
+                                    <span>Total</span>
+                                    <strong>{{ formatMoney(saleLineTotal(line)) }}</strong>
+                                </div>
+                                <button class="table-icon danger-icon" type="button" @click="removeSaleDraftLine(index)" title="Retirer" aria-label="Retirer">
+                                    <i class="fa-solid fa-xmark"></i>
+                                </button>
+                            </div>
+                            <button class="btn btn-primary sale-add-button" type="button" @click="addSaleDraftLine">
+                                <i class="fa-solid fa-plus"></i>Ajouter un autre produit
+                            </button>
+                        </div>
+                    </form>
+
+                    <form class="checkout sale-checkout" novalidate @submit.prevent="openSaleConfirmModal">
+                        <label v-if="!saleDraftIsProforma">Mode de paiement
                             <select v-model="saleForm.payment_method">
                                 <option value="cash">Espèces</option>
                                 <option value="mobile_money">Mobile Money</option>
@@ -417,55 +680,481 @@
                                 <option value="proforma">Facture pro forma</option>
                             </select>
                         </label>
-                        <div v-else class="sale-total">
-                            <span>Document</span>
-                            <strong>{{ activeSection === 'seller-proforma' ? 'Facture pro forma' : 'Facture' }}</strong>
-                        </div>
-                        <label v-if="saleForm.payment_method === 'credit'">Échéance crédit
+                        <label v-if="!saleDraftIsProforma && saleForm.payment_method === 'credit'">Échéance crédit
                             <input v-model="saleForm.credit_due_date" type="date" required>
                         </label>
                         <div class="sale-total">
                             <span>Total</span>
                             <strong>{{ formatMoney(cartTotal) }}</strong>
                         </div>
-                        <button class="btn btn-primary" type="submit" :disabled="savingSale || !cart.length">
-                            <i class="fa-solid fa-file-invoice"></i>{{ savingSale ? 'Validation...' : sellerCheckoutSubmitLabel }}
-                        </button>
+                        <div class="sale-submit-row full">
+                            <button class="btn btn-light" type="submit" :disabled="savingSale">
+                                <i class="fa-solid fa-file-invoice"></i>{{ savingSale ? 'Validation...' : sellerCheckoutSubmitLabel }}
+                            </button>
+                        </div>
                     </form>
+
+                    <div class="recent-documents-panel">
+                        <div class="section-title compact-title">
+                            <div>
+                                <h3>{{ recentCheckoutTitle }}</h3>
+                                <p>{{ saleDraftIsProforma ? 'Accès rapide aux dernières factures pro forma émises.' : 'Accès rapide aux dernières factures validées.' }}</p>
+                            </div>
+                        </div>
+                        <div v-if="recentCheckoutDocuments.length" class="table-wrap recent-documents-table-wrap">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Facture</th>
+                                        <th v-if="!currentUserCanSell">Vendeur</th>
+                                        <th>Client</th>
+                                        <th v-if="!saleDraftIsProforma">Paiement</th>
+                                        <th v-if="!saleDraftIsProforma">Statut</th>
+                                        <th>Total</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="sale in recentCheckoutDocuments" :key="sale.id">
+                                        <td>
+                                            <span class="table-date-stack">
+                                                <strong>{{ splitDateTime(sale.sold_at).date }}</strong>
+                                                <small>{{ splitDateTime(sale.sold_at).time }}</small>
+                                            </span>
+                                        </td>
+                                        <td><strong>{{ sale.number }}</strong><small>{{ sale.items.length }} ligne(s)</small></td>
+                                        <td v-if="!currentUserCanSell"><strong>{{ sellerDisplayName(sale.seller) }}</strong></td>
+                                        <td>{{ sale.customer?.name || 'Client comptoir' }}</td>
+                                        <td v-if="!saleDraftIsProforma">{{ paymentLabel(sale.payment_method) }}</td>
+                                        <td v-if="!saleDraftIsProforma"><span :class="['status', saleStatusClass(sale.status)]">{{ saleStatusLabel(sale.status) }}</span></td>
+                                        <td>{{ formatMoney(sale.total) }}</td>
+                                        <td>
+                                            <div class="row-actions">
+                                                <a class="table-icon" :href="`/businesses/${businessId}/sales/${sale.id}/invoice`" target="_blank" title="Voir la facture" aria-label="Voir la facture">
+                                                    <i class="fa-solid fa-file-invoice"></i>
+                                                </a>
+                                                <button v-if="canCancelSaleFromTable(sale)" class="table-icon danger-icon" type="button" @click="openSaleCancelModal(sale)" title="Annuler la commande" aria-label="Annuler la commande">
+                                                    <i class="fa-solid fa-ban"></i>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <p v-else class="empty recent-documents-empty">{{ saleDraftIsProforma ? 'Aucune facture pro forma récente.' : 'Aucune facture récente.' }}</p>
+                    </div>
 
                     <p v-if="saleMessage" class="message">{{ saleMessage }}</p>
                 </article>
             </section>
 
-            <section v-if="activeSection === 'sales' && !currentUserCanSell" class="card activation-status-card">
-                <i class="fa-solid fa-user-tag"></i>
-                <div>
-                    <h2>Les ventes sont enregistrées par les vendeurs</h2>
-                    <p>
-                        L'admin suit les factures ici. Pour vendre, ajoutez un vendeur avec son nom, son téléphone et son mot de passe depuis
-                        <a class="highlight-link" :href="sectionUrl('personnel')">Personnel & paie</a>.
-                    </p>
+            <div v-if="showSaleConfirmModal" class="modal-backdrop" @click.self="closeSaleConfirmModal">
+                <section class="choice-modal sale-confirm-modal">
+                    <div class="section-title">
+                        <div>
+                            <h2 class="sale-confirm-title"><i class="fa-solid fa-file-circle-check"></i>{{ saleForm.type === 'proforma' ? 'Vérifier la facture pro forma' : 'Vérifier la facture' }}</h2>
+                            <p>{{ saleForm.type === 'proforma' ? 'Contrôlez le devis avant de l’enregistrer. Aucun stock ne sera déduit.' : 'Contrôlez les informations avant validation définitive.' }}</p>
+                        </div>
+                        <button class="table-icon" type="button" @click="closeSaleConfirmModal" title="Fermer" aria-label="Fermer">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+                    <div class="sale-confirm-body">
+                        <div class="filtered-summary">
+                            <span>{{ saleDraftIsProforma ? (saleForm.customer_name || 'Client comptoir') : `${saleForm.customer_name || 'Client comptoir'} - ${paymentLabel(saleForm.payment_method)}` }}</span>
+                            <strong>{{ formatMoney(cartTotal) }}</strong>
+                        </div>
+                        <div class="payment-history">
+                            <div v-for="item in cart" :key="item.product_id" class="payment-history-row">
+                                <div>
+                                    <strong>{{ item.product_name }}</strong>
+                                    <small>{{ item.quantity }} x {{ formatMoney(item.unit_price) }}</small>
+                                </div>
+                                <b>{{ formatMoney(item.total) }}</b>
+                            </div>
+                        </div>
+                        <div v-if="!saleDraftIsProforma && saleForm.payment_method === 'credit'" class="filtered-summary">
+                            <span>Échéance crédit</span>
+                            <strong>{{ formatDateOnly(saleForm.credit_due_date) || '-' }}</strong>
+                        </div>
+                    </div>
+                    <div class="choice-actions">
+                        <button class="btn btn-light" type="button" @click="closeSaleConfirmModal">
+                            <i class="fa-solid fa-arrow-left"></i>Retour
+                        </button>
+                        <button class="btn btn-primary" type="button" :disabled="savingSale" @click="saveSale">
+                            <i class="fa-solid fa-check"></i>{{ savingSale ? 'Validation...' : 'Valider définitivement' }}
+                        </button>
+                    </div>
+                </section>
+            </div>
+
+            <div v-if="showSaleCompletedModal" class="modal-backdrop">
+                <section class="choice-modal sale-confirm-modal">
+                    <div class="section-title">
+                        <div>
+                            <h2 class="sale-confirm-title"><i class="fa-solid fa-circle-check"></i>{{ completedSale?.type === 'proforma' ? 'Facture pro forma enregistrée' : 'Facture enregistrée' }}</h2>
+                            <p>{{ completedSale?.number || 'Le document' }} est prêt.</p>
+                        </div>
+                        <button class="table-icon" type="button" @click="continueNewSale" title="Fermer" aria-label="Fermer">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+                    <div class="sale-confirm-body">
+                        <div class="filtered-summary">
+                            <span>{{ completedSale?.type === 'proforma' ? 'Total pro forma' : 'Total facture' }}</span>
+                            <strong>{{ formatMoney(completedSale?.total || 0) }}</strong>
+                        </div>
+                    </div>
+                    <div class="choice-actions">
+                        <button class="btn btn-light" type="button" @click="printCompletedSale">
+                            <i class="fa-solid fa-print"></i>Imprimer
+                        </button>
+                        <button class="btn btn-light" type="button" @click="openSaleWhatsappModal">
+                            <i class="fa-brands fa-whatsapp"></i>Envoyer WhatsApp
+                        </button>
+                        <button class="btn btn-primary" type="button" @click="continueNewSale">
+                            <i class="fa-solid fa-plus"></i>{{ completedSale?.type === 'proforma' ? 'Nouvelle proforma' : 'Nouvelle facture' }}
+                        </button>
+                    </div>
+                </section>
+            </div>
+
+            <div v-if="showSaleWhatsappModal" class="modal-backdrop" @click.self="showSaleWhatsappModal = false">
+                <section class="choice-modal">
+                    <div class="section-title">
+                        <div>
+                            <h2 class="sale-confirm-title"><i class="fa-brands fa-whatsapp"></i>Envoyer au client</h2>
+                            <p>Vérifiez le numéro avant l’envoi.</p>
+                        </div>
+                        <button class="table-icon" type="button" @click="showSaleWhatsappModal = false" title="Fermer" aria-label="Fermer">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+                    <form class="payment-modal-form" @submit.prevent="sendCompletedSaleWhatsapp">
+                        <label>Numéro WhatsApp du client
+                            <span class="phone-field">
+                                <span>01</span>
+                                <input :value="phoneInputValue(completedSaleWhatsappPhone)" type="tel" required inputmode="numeric" maxlength="8" pattern="\d{8}" placeholder="96228860" @input="completedSaleWhatsappPhone = phoneWithPrefix($event.target.value)">
+                            </span>
+                        </label>
+                        <div class="choice-actions">
+                            <button class="btn btn-light" type="button" @click="showSaleWhatsappModal = false">
+                                <i class="fa-solid fa-xmark"></i>Annuler
+                            </button>
+                            <button class="btn btn-primary" type="submit">
+                                <i class="fa-brands fa-whatsapp"></i>Envoyer
+                            </button>
+                        </div>
+                    </form>
+                </section>
+            </div>
+
+            <section v-if="activeSection === 'services'" class="card">
+                <div class="section-title">
+                    <div>
+                        <h2><span class="section-title-icon"><i class="fa-solid fa-bell-concierge"></i></span>Services</h2>
+                        <p>Vendez une prestation directement ou préparez les services disponibles.</p>
+                    </div>
+                </div>
+
+                <div class="customer-view-switch">
+                    <button :class="['customer-switch-card', servicePageView === 'sale' ? 'active' : '']" type="button" @click="servicePageView = 'sale'">
+                        <i class="fa-solid fa-cash-register"></i>
+                        <span>Section vente</span>
+                        <strong>Facture service</strong>
+                    </button>
+                    <button :class="['customer-switch-card', servicePageView === 'catalog' ? 'active' : '']" type="button" @click="servicePageView = 'catalog'">
+                        <i class="fa-solid fa-bell-concierge"></i>
+                        <span>Section services</span>
+                        <strong>Services disponibles</strong>
+                    </button>
+                </div>
+
+                <div v-if="servicePageView === 'sale'" class="content-grid seller-sale-grid service-sale-grid">
+                    <article class="service-panel service-sale-panel">
+                        <div class="section-title">
+                            <div>
+                                <h2>Vendre un service</h2>
+                                <p>Choisissez la prestation, le client et le mode de paiement pour générer une facture.</p>
+                            </div>
+                        </div>
+                        <form class="sale-form" @submit.prevent>
+                            <label class="sale-customer-field">Nom du client
+                                <span class="quick-entry-field customer-picker">
+                                    <input
+                                        v-model="serviceCustomerSearch"
+                                        type="search"
+                                        placeholder="Écrire ou rechercher un client"
+                                        autocomplete="off"
+                                        @input="syncServiceSaleCustomerFromSearch"
+                                        @focus="showServiceCustomerSuggestions = true"
+                                        @blur="hideServiceSaleCustomerSuggestions"
+                                    >
+                                    <button v-if="canCreateServiceSaleCustomer" class="btn btn-light" type="button" @click="openCustomerCreateModal(serviceCustomerSearch, 'service-sale')" title="Ajouter un client">
+                                        <i class="fa-solid fa-user-plus"></i>Nouveau client
+                                    </button>
+                                    <div v-if="showServiceCustomerSuggestions && filteredServiceSaleCustomers.length" class="quick-suggestions">
+                                        <button v-for="customer in filteredServiceSaleCustomers" :key="customer.id" type="button" @mousedown.prevent="selectServiceSaleCustomer(customer)">
+                                            <span>{{ customer.name }}</span>
+                                            <small>{{ formatPhoneDisplay(customer.phone) || 'Téléphone non renseigné' }}</small>
+                                        </button>
+                                    </div>
+                                </span>
+                            </label>
+                            <div class="sale-lines full">
+                                <div class="sale-line-row service-line-row" v-for="(line, index) in serviceSaleLines" :key="line.key">
+                                    <label>Service
+                                        <select v-model="line.service_id" required @change="syncServiceLinePrice(line)">
+                                            <option value="">Choisir un service</option>
+                                            <option v-for="service in selectableServicesForLine(line)" :key="service.id" :value="service.id">
+                                                {{ service.name }} - {{ formatMoney(service.price) }}
+                                            </option>
+                                        </select>
+                                    </label>
+                                    <label>Prix unitaire
+                                        <input v-model.number="line.unit_price" type="number" min="0" step="1" required :readonly="!currentUser?.can_edit_prices && currentUserCanSell">
+                                    </label>
+                                    <label>Quantité
+                                        <input v-model.number="line.quantity" type="number" min="1" step="1" required>
+                                    </label>
+                                    <div class="sale-line-total">
+                                        <span>Total</span>
+                                        <strong>{{ formatMoney(serviceLineTotal(line)) }}</strong>
+                                    </div>
+                                    <button class="table-icon danger-icon" type="button" @click="removeServiceSaleLine(index)" title="Retirer" aria-label="Retirer">
+                                        <i class="fa-solid fa-xmark"></i>
+                                    </button>
+                                </div>
+                                <button class="btn btn-primary sale-add-button" type="button" @click="addServiceSaleLine">
+                                    <i class="fa-solid fa-plus"></i>Ajouter service
+                                </button>
+                            </div>
+                        </form>
+                        <form class="checkout sale-checkout" novalidate @submit.prevent="openServiceSaleConfirmModal">
+                            <label>Mode de paiement
+                                <select v-model="serviceSaleForm.payment_method">
+                                    <option value="cash">Espèces</option>
+                                    <option value="mobile_money">Mobile Money</option>
+                                    <option value="credit">Crédit</option>
+                                </select>
+                            </label>
+                            <label v-if="serviceSaleForm.payment_method === 'credit'">Échéance crédit
+                                <input v-model="serviceSaleForm.credit_due_date" type="date" required>
+                            </label>
+                            <div class="sale-total">
+                                <span>Total</span>
+                                <strong>{{ formatMoney(serviceSaleTotal) }}</strong>
+                            </div>
+                            <div class="sale-submit-row full">
+                                <button class="btn btn-light" type="submit" :disabled="savingServiceSale">
+                                    <i class="fa-solid fa-file-invoice"></i>{{ savingServiceSale ? 'Validation...' : 'Valider la facture' }}
+                                </button>
+                            </div>
+                        </form>
+                    </article>
+                </div>
+
+                <div v-if="servicePageView === 'catalog'" class="content-grid service-catalog-grid">
+                    <article class="service-panel service-list-panel">
+                        <div class="section-title compact-title">
+                            <div>
+                                <h3>Services disponibles</h3>
+                                <p>{{ currentUserCanSell ? 'Catalogue des prestations que vous pouvez facturer.' : 'Créez les services avec leur prix et leurs détails.' }}</p>
+                            </div>
+                            <div v-if="!currentUserCanSell" class="section-actions">
+                                <button class="btn btn-primary" type="button" @click="openServiceModal()">
+                                    <i class="fa-solid fa-plus"></i>Nouveau service
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="filters-grid">
+                            <label>Rechercher
+                                <input v-model="serviceFilters.search" type="search" placeholder="Nom ou détails">
+                            </label>
+                            <label>Trier par
+                                <select v-model="serviceSort">
+                                    <option value="name_asc">Service A-Z</option>
+                                    <option value="price_desc">Prix décroissant</option>
+                                    <option value="price_asc">Prix croissant</option>
+                                </select>
+                            </label>
+                        </div>
+
+                        <div class="filtered-summary">
+                            <span>{{ servicesCountLabel }}</span>
+                            <strong>Disponible à la vente</strong>
+                        </div>
+
+                        <div class="table-wrap">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Service</th>
+                                        <th>Prix</th>
+                                        <th v-if="!currentUserCanSell">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="service in filteredServices" :key="service.id">
+                                        <td><strong>{{ service.name }}</strong><small>{{ service.details || '-' }}</small></td>
+                                        <td>{{ formatMoney(service.price) }}</td>
+                                        <td v-if="!currentUserCanSell">
+                                            <div class="row-actions">
+                                                <button class="table-icon" type="button" @click="openServiceModal(service)" title="Modifier" aria-label="Modifier">
+                                                    <i class="fa-solid fa-pen-to-square"></i>
+                                                </button>
+                                                <button class="table-icon danger-icon" type="button" @click="removeService(service)" title="Supprimer" aria-label="Supprimer">
+                                                    <i class="fa-solid fa-trash"></i>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    <tr v-if="!filteredServices.length">
+                                        <td :colspan="currentUserCanSell ? 2 : 3" class="empty">Aucun service ne correspond aux filtres.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="table-pagination">
+                            <span>{{ paginationLabel(filteredServices.length) }}</span>
+                            <div>
+                                <button type="button" disabled>Précédent</button>
+                                <button type="button" disabled>Suivant</button>
+                            </div>
+                        </div>
+                    </article>
+
                 </div>
             </section>
+
+            <div v-if="showServiceModal" class="modal-backdrop" @click.self="closeServiceModal">
+                <section class="form-modal">
+                    <div class="section-title">
+                        <div>
+                            <h2 class="sale-confirm-title"><i class="fa-solid fa-bell-concierge"></i>{{ editingService ? 'Modifier le service' : 'Ajouter un service courant' }}</h2>
+                            <p>Renseignez la prestation proposée à la vente.</p>
+                        </div>
+                        <button class="table-icon modal-close" type="button" @click="closeServiceModal" title="Fermer" aria-label="Fermer">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+                    <form class="product-form" @submit.prevent="saveService">
+                        <label>Nom du service
+                            <input v-model="serviceForm.name" type="text" required placeholder="Ex. Installation, livraison, réparation">
+                        </label>
+                        <label>Prix
+                            <input v-model.number="serviceForm.price" type="number" min="0" step="1" required>
+                        </label>
+                        <label class="full">Détails
+                            <textarea v-model="serviceForm.details" rows="3" placeholder="Détails utiles pour le vendeur"></textarea>
+                        </label>
+                        <div class="choice-actions full">
+                            <button class="btn btn-light" type="button" @click="closeServiceModal"><i class="fa-solid fa-xmark"></i>Annuler</button>
+                            <button class="btn btn-primary" type="submit"><i class="fa-solid fa-check"></i>Enregistrer</button>
+                        </div>
+                    </form>
+                </section>
+            </div>
+
+            <div v-if="showServiceSaleConfirmModal" class="modal-backdrop" @click.self="closeServiceSaleConfirmModal">
+                <section class="choice-modal sale-confirm-modal">
+                    <div class="section-title">
+                        <div>
+                            <h2 class="sale-confirm-title"><i class="fa-solid fa-file-circle-check"></i>Vérifier la facture service</h2>
+                            <p>Contrôlez les informations avant validation définitive.</p>
+                        </div>
+                        <button class="table-icon" type="button" @click="closeServiceSaleConfirmModal" title="Fermer" aria-label="Fermer">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+                    <div class="sale-confirm-body">
+                        <div class="filtered-summary">
+                            <span>{{ serviceSaleForm.customer_name || 'Client comptoir' }} - {{ paymentLabel(serviceSaleForm.payment_method) }}</span>
+                            <strong>{{ formatMoney(serviceSaleTotal) }}</strong>
+                        </div>
+                        <div class="payment-history">
+                            <div v-for="item in serviceSaleCart" :key="item.key" class="payment-history-row">
+                                <div>
+                                    <strong>{{ item.service_name }}</strong>
+                                    <small>{{ item.quantity }} x {{ formatMoney(item.unit_price) }}</small>
+                                </div>
+                                <b>{{ formatMoney(item.total) }}</b>
+                            </div>
+                        </div>
+                        <div v-if="serviceSaleForm.payment_method === 'credit'" class="filtered-summary">
+                            <span>Échéance crédit</span>
+                            <strong>{{ formatDateOnly(serviceSaleForm.credit_due_date) || '-' }}</strong>
+                        </div>
+                    </div>
+                    <div class="choice-actions">
+                        <button class="btn btn-light" type="button" @click="closeServiceSaleConfirmModal">
+                            <i class="fa-solid fa-arrow-left"></i>Retour
+                        </button>
+                        <button class="btn btn-primary" type="button" :disabled="savingServiceSale" @click="saveServiceSale">
+                            <i class="fa-solid fa-check"></i>{{ savingServiceSale ? 'Validation...' : 'Valider définitivement' }}
+                        </button>
+                    </div>
+                </section>
+            </div>
 
             <section v-if="activeSection === 'stocks'" class="card">
                 <div class="section-title">
                     <div>
-                        <h2>Stocks</h2>
+                        <h2><span class="section-title-icon"><i class="fa-solid fa-boxes-stacked"></i></span>Stocks & Historique</h2>
+                        <p>{{ stockPageView === 'history' ? 'Suivez les entrées, sorties, ventes et corrections de stock.' : (stockView === 'products' ? 'Suivez les articles, les prix, les seuils et les quantités disponibles.' : 'Analysez la valeur du stock, les volumes et les alertes par famille de produits.') }}</p>
                     </div>
-                    <div class="section-actions">
-                        <button class="btn btn-primary" type="button" @click="openProductModal">
-                            <i class="fa-solid fa-plus"></i>Ajouter le produit
+                    <div v-if="stockPageView === 'stocks'" class="section-actions">
+                        <button v-if="stockView === 'products'" class="btn btn-primary" type="button" @click="openProductModal()">
+                            <i class="fa-solid fa-plus"></i>Nouveau produit
                         </button>
-                        <button class="btn btn-light" type="button" @click="showProductPrintModal = true">
+                        <button v-if="stockView === 'categories'" class="btn btn-primary" type="button" @click="openCategoryModal()">
+                            <i class="fa-solid fa-plus"></i>Nouvelle catégorie
+                        </button>
+                        <button v-if="stockView === 'products'" class="btn btn-light" type="button" @click="showProductPrintModal = true">
+                            <i class="fa-solid fa-print"></i>Imprimer
+                        </button>
+                    </div>
+                    <div v-else class="section-actions">
+                        <button class="btn btn-light" type="button" @click="printFilteredStockMovements">
                             <i class="fa-solid fa-print"></i>Imprimer
                         </button>
                     </div>
                 </div>
 
+                <div class="customer-view-switch">
+                    <button :class="['customer-switch-card', stockPageView === 'stocks' ? 'active' : '']" type="button" @click="stockPageView = 'stocks'">
+                        <i class="fa-solid fa-boxes-stacked"></i>
+                        <span>Stocks</span>
+                        <strong>{{ filteredProducts.length }}</strong>
+                    </button>
+                    <button :class="['customer-switch-card', stockPageView === 'history' ? 'active' : '']" type="button" @click="stockPageView = 'history'">
+                        <i class="fa-solid fa-clock-rotate-left"></i>
+                        <span>Historique</span>
+                        <strong>{{ filteredStockMovements.length }}</strong>
+                    </button>
+                </div>
+
+                <div v-if="stockPageView === 'stocks'" class="customer-view-switch">
+                    <button :class="['customer-switch-card', stockView === 'products' ? 'active' : '']" type="button" @click="stockView = 'products'">
+                        <i class="fa-solid fa-boxes-stacked"></i>
+                        <span>Produits</span>
+                        <strong>{{ filteredProducts.length }}</strong>
+                    </button>
+                    <button :class="['customer-switch-card', stockView === 'categories' ? 'active' : '']" type="button" @click="stockView = 'categories'">
+                        <i class="fa-solid fa-tags"></i>
+                        <span>Catégories</span>
+                        <strong>{{ filteredStockCategories.length }}</strong>
+                    </button>
+                </div>
+
+                <template v-if="stockPageView === 'stocks' && stockView === 'products'">
                 <div class="filters-grid">
                     <label>Rechercher
-                        <input v-model="productFilters.search" type="search" placeholder="Produit, catégorie ou unité">
+                        <input v-model="productFilters.search" type="search" placeholder="Produit, catégorie ou note">
                     </label>
                     <label>Catégorie
                         <select v-model="productFilters.category">
@@ -487,6 +1176,8 @@
                             <option value="stock_desc">Stock décroissant</option>
                             <option value="sale_desc">Prix vente décroissant</option>
                             <option value="category_asc">Catégorie A-Z</option>
+                            <option value="sold_desc">Produit le plus vendu</option>
+                            <option value="sold_asc">Produit le moins vendu</option>
                         </select>
                     </label>
                 </div>
@@ -504,28 +1195,41 @@
                                 <th>Catégorie</th>
                                 <th>Stock</th>
                                 <th>Seuil</th>
-                                <th>Prix achat</th>
                                 <th>Prix vente</th>
-                                <th>État</th>
+                                <th class="no-table-icon">État</th>
+                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
                             <tr v-for="product in filteredProducts" :key="product.id">
-                                <td><strong>{{ product.name }}</strong><small>{{ product.unit }}</small></td>
+                                <td><strong>{{ product.name }}</strong></td>
                                 <td>{{ product.category?.name || 'Non classé' }}</td>
                                 <td>{{ product.stock_quantity }}</td>
                                 <td>{{ product.alert_threshold }}</td>
-                                <td>{{ formatMoney(product.purchase_price) }}</td>
-                                <td>
-                                    <form v-if="currentUser.can_edit_prices" class="inline-price-form" @submit.prevent="updateSellerProductPrice(product)">
-                                        <input v-model.number="productPriceForms[product.id]" type="number" min="0" required>
-                                        <button class="table-icon" type="submit" title="Enregistrer le prix" aria-label="Enregistrer le prix">
-                                            <i class="fa-solid fa-check"></i>
-                                        </button>
-                                    </form>
-                                    <template v-else>{{ formatMoney(product.sale_price) }}</template>
-                                </td>
+                                <td>{{ formatMoney(product.sale_price) }}</td>
                                 <td><span :class="['status', isLow(product) ? 'danger' : 'ok']">{{ isLow(product) ? 'Stock bas' : 'OK' }}</span></td>
+                                <td>
+                                    <div class="row-actions">
+                                        <button class="table-icon" type="button" @click="openStockMovementModal(product, 'add')" title="Ajouter du stock" aria-label="Ajouter du stock">
+                                            <i class="fa-solid fa-plus"></i>
+                                        </button>
+                                        <button class="table-icon" type="button" @click="openStockMovementModal(product, 'remove')" title="Retirer du stock" aria-label="Retirer du stock">
+                                            <i class="fa-solid fa-minus"></i>
+                                        </button>
+                                        <button class="table-icon" type="button" @click="openProductDetails(product)" title="Voir la fiche produit" aria-label="Voir la fiche produit">
+                                            <i class="fa-solid fa-eye"></i>
+                                        </button>
+                                        <button class="table-icon" type="button" @click="openStockHistoryModal(product)" title="Historique du stock" aria-label="Historique du stock">
+                                            <i class="fa-solid fa-clock-rotate-left"></i>
+                                        </button>
+                                        <button class="table-icon" type="button" @click="openProductModal(product)" title="Modifier" aria-label="Modifier">
+                                            <i class="fa-solid fa-pen-to-square"></i>
+                                        </button>
+                                        <button class="table-icon danger-icon" type="button" @click="archiveProduct(product)" title="Archiver" aria-label="Archiver">
+                                            <i class="fa-solid fa-box-archive"></i>
+                                        </button>
+                                    </div>
+                                </td>
                             </tr>
                             <tr v-if="!filteredProducts.length">
                                 <td colspan="7" class="empty">Aucun produit ne correspond aux filtres.</td>
@@ -541,15 +1245,209 @@
                     </div>
                 </div>
                 <p v-if="message" class="message">{{ message }}</p>
+                </template>
+
+                <template v-else-if="stockPageView === 'stocks'">
+                <div class="filters-grid">
+                    <label>Rechercher
+                        <input v-model="stockCategoryFilters.search" type="search" placeholder="Nom de catégorie">
+                    </label>
+                    <label>État
+                        <select v-model="stockCategoryFilters.status">
+                            <option value="">Toutes les catégories</option>
+                            <option value="low">Avec stock bas</option>
+                            <option value="ok">Sans stock bas</option>
+                        </select>
+                    </label>
+                    <label>Trier par
+                        <select v-model="stockCategorySort">
+                            <option value="name_asc">Catégorie A-Z</option>
+                            <option value="value_desc">Valeur décroissante</option>
+                            <option value="products_desc">Produits décroissant</option>
+                            <option value="low_desc">Alertes décroissant</option>
+                        </select>
+                    </label>
+                </div>
+
+                <div class="filtered-summary">
+                    <span>{{ stockCategoriesCountLabel }}</span>
+                    <strong>{{ formatMoney(filteredStockCategoriesValue) }}</strong>
+                </div>
+
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Catégorie</th>
+                                <th>Produits</th>
+                                <th>Stock total</th>
+                                <th>Valeur stock</th>
+                                <th>Alertes</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="category in filteredStockCategories" :key="category.id || category.name">
+                                <td><strong>{{ category.name }}</strong></td>
+                                <td>{{ category.productsCount }}</td>
+                                <td>{{ category.stockQuantity }}</td>
+                                <td>{{ formatMoney(category.stockValue) }}</td>
+                                <td><span :class="['status', category.lowStockCount ? 'danger' : 'ok']">{{ category.lowStockCount ? `${category.lowStockCount} stock bas` : 'OK' }}</span></td>
+                                <td>
+                                    <div class="row-actions">
+                                        <button class="table-icon" type="button" :disabled="!category.id" @click="openCategoryModal(category)" title="Modifier" aria-label="Modifier">
+                                            <i class="fa-solid fa-pen"></i>
+                                        </button>
+                                        <button class="table-icon danger-icon" type="button" :disabled="!category.id" @click="archiveCategory(category)" title="Archiver" aria-label="Archiver">
+                                            <i class="fa-solid fa-box-archive"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr v-if="!filteredStockCategories.length">
+                                <td colspan="6" class="empty">Aucune catégorie ne correspond aux filtres.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="table-pagination">
+                    <span>{{ paginationLabel(filteredStockCategories.length) }}</span>
+                    <div>
+                        <button type="button" disabled>Précédent</button>
+                        <button type="button" disabled>Suivant</button>
+                    </div>
+                </div>
+                </template>
+
+                <template v-else>
+                <div class="filters-grid">
+                    <label>Rechercher
+                        <input v-model="stockMovementFilters.search" type="search" placeholder="Produit, motif, note ou utilisateur">
+                    </label>
+                    <label>Type
+                        <select v-model="stockMovementFilters.type">
+                            <option value="">Tous les mouvements</option>
+                            <option value="in">Entrées</option>
+                            <option value="out">Sorties</option>
+                            <option value="sale">Ventes</option>
+                        </select>
+                    </label>
+                    <div class="filter-control">
+                        <span>Trier par date</span>
+                        <button class="btn filter-date-btn" type="button" @click="openStockMovementDateFilter">
+                            <i class="fa-solid fa-calendar-days"></i>{{ stockMovementDateFilterLabel }}
+                        </button>
+                    </div>
+                    <label>Trier par
+                        <select v-model="stockMovementSort">
+                            <option value="date_desc">Date récente</option>
+                            <option value="date_asc">Date ancienne</option>
+                            <option value="quantity_desc">Quantité décroissante</option>
+                            <option value="quantity_asc">Quantité croissante</option>
+                            <option value="product_asc">Produit A-Z</option>
+                        </select>
+                    </label>
+                </div>
+
+                <div class="filtered-summary">
+                    <span>{{ stockMovementsCountLabel }}</span>
+                    <strong>{{ stockMovementsQuantityLabel }}</strong>
+                </div>
+
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Produit</th>
+                                <th>Type</th>
+                                <th>Quantité</th>
+                                <th>Motif</th>
+                                <th>Utilisateur</th>
+                                <th>Note</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="movement in filteredStockMovements" :key="movement.id">
+                                <td>
+                                    <span class="table-date-stack">
+                                        <strong>{{ splitDateTime(movement.moved_at).date }}</strong>
+                                        <small>{{ splitDateTime(movement.moved_at).time }}</small>
+                                    </span>
+                                </td>
+                                <td><strong>{{ movement.product?.name || 'Produit supprimé' }}</strong></td>
+                                <td><span :class="['status', stockMovementStatusClass(movement)]">{{ stockMovementTypeLabel(movement) }}</span></td>
+                                <td>{{ formatStockQuantity(Math.abs(Number(movement.quantity || 0))) }}</td>
+                                <td>{{ movement.reason || '-' }}</td>
+                                <td>{{ stockMovementUserDisplay(movement) }}</td>
+                                <td>{{ movement.notes || '-' }}</td>
+                            </tr>
+                            <tr v-if="!filteredStockMovements.length">
+                                <td colspan="7" class="empty">Aucun mouvement ne correspond aux filtres.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="table-pagination">
+                    <span>{{ paginationLabel(filteredStockMovements.length) }}</span>
+                    <div>
+                        <button type="button" disabled>Précédent</button>
+                        <button type="button" disabled>Suivant</button>
+                    </div>
+                </div>
+                </template>
             </section>
 
-            <div v-if="showProductModal" class="modal-backdrop" @click.self="showProductModal = false">
+            <div v-if="showStockMovementDateModal" class="modal-backdrop" @click.self="showStockMovementDateModal = false">
+                <section class="choice-modal">
+                    <div class="section-title">
+                        <div>
+                            <h2>Trier par date</h2>
+                            <p>Choisissez une date de mouvement précise ou une période.</p>
+                        </div>
+                        <button class="table-icon" type="button" @click="showStockMovementDateModal = false" title="Fermer" aria-label="Fermer">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+                    <div class="segmented-actions">
+                        <button :class="['btn', stockMovementDateMode === 'exact' ? 'btn-primary' : 'btn-light']" type="button" @click="stockMovementDateMode = 'exact'">
+                            Date précise
+                        </button>
+                        <button :class="['btn', stockMovementDateMode === 'range' ? 'btn-primary' : 'btn-light']" type="button" @click="stockMovementDateMode = 'range'">
+                            Entre deux dates
+                        </button>
+                    </div>
+                    <div class="choice-form">
+                        <label v-if="stockMovementDateMode === 'exact'">Date précise
+                            <input v-model="stockMovementDateDraft.exactDate" type="date">
+                        </label>
+                        <template v-else>
+                            <label>Du
+                                <input v-model="stockMovementDateDraft.startDate" type="date">
+                            </label>
+                            <label>Au
+                                <input v-model="stockMovementDateDraft.endDate" type="date">
+                            </label>
+                        </template>
+                    </div>
+                    <div class="choice-actions">
+                        <button class="btn btn-light" type="button" @click="clearStockMovementDateFilter">
+                            <i class="fa-solid fa-eraser"></i>Effacer
+                        </button>
+                        <button class="btn btn-primary" type="button" @click="applyStockMovementDateFilter">
+                            <i class="fa-solid fa-check"></i>Appliquer
+                        </button>
+                    </div>
+                </section>
+            </div>
+
+            <div v-if="showProductModal" class="modal-backdrop" @click.self="closeProductModal">
                 <section class="form-modal">
                     <div class="section-title">
                         <div>
-                            <h2>Ajouter un produit</h2>
+                            <h2>{{ editingProduct ? 'Modifier le produit' : 'Ajouter un produit' }}</h2>
                         </div>
-                        <button class="table-icon" type="button" @click="showProductModal = false" title="Fermer" aria-label="Fermer">
+                        <button class="table-icon" type="button" @click="closeProductModal" title="Fermer" aria-label="Fermer">
                             <i class="fa-solid fa-xmark"></i>
                         </button>
                     </div>
@@ -559,13 +1457,14 @@
                             <input v-model="form.name" type="text" required placeholder="Ex. Riz premium 25kg">
                         </label>
                         <label>Catégorie
-                            <input v-model="form.category_name" type="text" placeholder="Ex. Alimentation">
-                        </label>
-                        <label>Unité
-                            <input v-model="form.unit" type="text" required placeholder="unité, kg, carton">
+                            <select v-model="form.category_name" @change="onProductCategoryChange">
+                                <option v-for="category in categories" :key="category.id" :value="category.name">{{ category.name }}</option>
+                                <option value="__new__">Nouvelle catégorie</option>
+                            </select>
                         </label>
                         <label>Prix d'achat
-                            <input v-model.number="form.purchase_price" type="number" required min="0">
+                            <input v-model.number="form.purchase_price" type="number" required min="0" :readonly="editingProductPurchasePriceLocked">
+                            <small v-if="editingProductPurchasePriceLocked" class="muted">Prix d'achat verrouillé après la première vente.</small>
                         </label>
                         <label>Prix de vente
                             <input v-model.number="form.sale_price" type="number" required min="0">
@@ -576,12 +1475,15 @@
                         <label>Seuil d'alerte
                             <input v-model.number="form.alert_threshold" type="number" required min="0" step="0.01">
                         </label>
+                        <label class="full">Note
+                            <textarea v-model="form.notes" rows="3" placeholder="Note interne sur le produit"></textarea>
+                        </label>
                         <div class="choice-actions full">
-                            <button class="btn btn-light" type="button" @click="showProductModal = false">
+                            <button class="btn btn-light" type="button" @click="closeProductModal">
                                 <i class="fa-solid fa-xmark"></i>Annuler
                             </button>
                             <button class="btn btn-primary" type="submit" :disabled="saving">
-                                <i class="fa-solid fa-check"></i>{{ saving ? 'Enregistrement...' : 'Enregistrer' }}
+                                <i class="fa-solid fa-check"></i>{{ saving ? 'Enregistrement...' : (editingProduct ? 'Modifier' : 'Enregistrer') }}
                             </button>
                         </div>
                     </form>
@@ -592,19 +1494,155 @@
                 <section class="choice-modal">
                     <div class="section-title">
                         <div>
-                            <h2>Imprimer</h2>
+                            <h2 class="sale-confirm-title"><i class="fa-solid fa-print"></i>Imprimer</h2>
+                            <p>Choisissez les colonnes à inclure dans le document.</p>
                         </div>
                         <button class="table-icon" type="button" @click="showProductPrintModal = false" title="Fermer" aria-label="Fermer">
                             <i class="fa-solid fa-xmark"></i>
                         </button>
                     </div>
+                    <div class="settings-checks product-print-columns">
+                        <strong>Colonnes à imprimer</strong>
+                        <label v-for="column in productPrintColumns" :key="column.key">
+                            <input v-model="selectedProductPrintColumnKeys" type="checkbox" :value="column.key">
+                            {{ column.label }}
+                        </label>
+                    </div>
                     <div class="segmented-actions">
-                        <button class="btn btn-light" type="button" @click="printFilteredProducts">
+                        <button class="btn btn-pdf" type="button" @click="printFilteredProducts">
                             <i class="fa-solid fa-file-pdf"></i>PDF
                         </button>
-                        <button class="btn btn-light" type="button" @click="exportFilteredProductsExcel">
+                        <button class="btn btn-excel" type="button" @click="exportFilteredProductsExcel">
                             <i class="fa-solid fa-file-csv"></i>Excel
                         </button>
+                    </div>
+                </section>
+            </div>
+
+            <div v-if="showCategoryModal" class="modal-backdrop" @click.self="closeCategoryModal">
+                <section class="form-modal">
+                    <div class="section-title">
+                        <div>
+                            <h2><i class="fa-solid fa-tags"></i>{{ editingCategory ? 'Modifier la catégorie' : 'Nouvelle catégorie' }}</h2>
+                            <p v-if="editingCategory">La modification sera appliquée aux produits liés.</p>
+                            <p v-else>Créez une famille de produits pour organiser le stock.</p>
+                        </div>
+                        <button class="table-icon" type="button" @click="closeCategoryModal" title="Fermer" aria-label="Fermer">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+
+                    <form class="product-form" @submit.prevent="saveCategory">
+                        <label class="full">Nom de la catégorie
+                            <input v-model="categoryForm.name" type="text" required placeholder="Ex. Alimentation">
+                        </label>
+                        <div class="choice-actions full">
+                            <button class="btn btn-light" type="button" @click="closeCategoryModal">
+                                <i class="fa-solid fa-xmark"></i>Annuler
+                            </button>
+                            <button class="btn btn-primary" type="submit" :disabled="savingCategory">
+                                <i class="fa-solid fa-check"></i>{{ savingCategory ? 'Enregistrement...' : 'Enregistrer' }}
+                            </button>
+                        </div>
+                    </form>
+                </section>
+            </div>
+
+            <div v-if="showStockMovementModal" class="modal-backdrop" @click.self="closeStockMovementModal">
+                <section class="form-modal">
+                    <div class="section-title">
+                        <div>
+                            <h2><i :class="stockMovementMode === 'add' ? 'fa-solid fa-plus' : 'fa-solid fa-minus'"></i>{{ stockMovementMode === 'add' ? 'Ajouter du stock' : 'Retirer du stock' }}</h2>
+                            <p>{{ stockMovementProduct?.name }} - stock actuel : {{ stockMovementProduct?.stock_quantity }}</p>
+                        </div>
+                        <button class="table-icon" type="button" @click="closeStockMovementModal" title="Fermer" aria-label="Fermer">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+
+                    <form class="product-form" @submit.prevent="saveStockMovement">
+                        <label>Quantité
+                            <input v-model.number="stockMovementForm.quantity" type="number" required min="0.01" step="0.01">
+                        </label>
+                        <label class="full">Notes
+                            <textarea v-model="stockMovementForm.notes" rows="3" required :placeholder="stockMovementMode === 'add' ? 'Ex. Réapprovisionnement fournisseur, correction inventaire...' : 'Ex. Perte, casse, correction inventaire...'"></textarea>
+                        </label>
+                        <div class="choice-actions full">
+                            <button class="btn btn-light" type="button" @click="closeStockMovementModal">
+                                <i class="fa-solid fa-xmark"></i>Annuler
+                            </button>
+                            <button class="btn btn-primary" type="submit" :disabled="savingStockMovement">
+                                <i class="fa-solid fa-check"></i>{{ savingStockMovement ? 'Enregistrement...' : 'Enregistrer' }}
+                            </button>
+                        </div>
+                    </form>
+                </section>
+            </div>
+
+            <div v-if="showProductDetailsModal" class="modal-backdrop" @click.self="closeProductDetails">
+                <section class="choice-modal">
+                    <div class="section-title">
+                        <div>
+                            <h2><i class="fa-solid fa-box-open"></i>Fiche produit</h2>
+                            <p>{{ selectedProductDetails?.name || 'Produit' }}</p>
+                        </div>
+                        <div class="row-actions">
+                            <button class="table-icon" type="button" @click="printProductDetails" title="Imprimer" aria-label="Imprimer">
+                                <i class="fa-solid fa-print"></i>
+                            </button>
+                            <button class="table-icon" type="button" @click="closeProductDetails" title="Fermer" aria-label="Fermer">
+                                <i class="fa-solid fa-xmark"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="details-list">
+                        <div v-for="item in productDetailsList" :key="item.label" class="details-list-row">
+                            <span class="details-list-icon"><i :class="item.icon"></i></span>
+                            <span class="details-list-text">
+                                <span>{{ item.label }}</span>
+                                <strong>{{ item.value }}</strong>
+                            </span>
+                        </div>
+                    </div>
+
+                    <div class="choice-actions">
+                        <button class="btn btn-light" type="button" @click="closeProductDetails">
+                            <i class="fa-solid fa-xmark"></i>Fermer
+                        </button>
+                        <button class="btn btn-primary" type="button" @click="printProductDetails">
+                            <i class="fa-solid fa-print"></i>Imprimer
+                        </button>
+                    </div>
+                </section>
+            </div>
+
+            <div v-if="showStockHistoryModal" class="modal-backdrop" @click.self="closeStockHistoryModal">
+                <section class="choice-modal">
+                    <div class="section-title">
+                        <div>
+                            <h2><i class="fa-solid fa-clock-rotate-left"></i>Historique du stock</h2>
+                            <p>{{ stockHistoryProduct?.name || 'Produit' }} - stock actuel : {{ stockHistoryProduct?.stock_quantity ?? '-' }}</p>
+                        </div>
+                        <button class="table-icon" type="button" @click="closeStockHistoryModal" title="Fermer" aria-label="Fermer">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+
+                    <div class="stock-history-list">
+                        <article v-for="movement in stockHistoryMovements" :key="movement.id" class="stock-history-item">
+                            <span :class="['stock-history-icon', movement.type === 'in' ? 'in' : 'out']">
+                                <i :class="movement.type === 'in' ? 'fa-solid fa-plus' : 'fa-solid fa-minus'"></i>
+                            </span>
+                            <div>
+                                <strong>{{ movement.type === 'in' ? 'Entrée de stock' : 'Sortie de stock' }} - {{ movement.quantity }}</strong>
+                                <span>{{ movement.reason || '-' }}</span>
+                                <small>{{ formatDate(movement.moved_at) }}{{ movement.user?.name ? ` - ${movement.user.name}` : '' }}</small>
+                                <p v-if="movement.notes">{{ movement.notes }}</p>
+                            </div>
+                        </article>
+                        <p v-if="loadingStockHistory" class="empty small-empty">Chargement de l’historique...</p>
+                        <p v-else-if="!stockHistoryMovements.length" class="empty small-empty">Aucun mouvement de stock enregistré pour ce produit.</p>
                     </div>
                 </section>
             </div>
@@ -619,7 +1657,7 @@
 
                 <div class="filters-grid">
                     <label>Rechercher
-                        <input v-model="productFilters.search" type="search" placeholder="Produit, catégorie ou unité">
+                        <input v-model="productFilters.search" type="search" placeholder="Produit, catégorie ou note">
                     </label>
                     <label>Catégorie
                         <select v-model="productFilters.category">
@@ -656,23 +1694,25 @@
                             <tr>
                                 <th>Produit</th>
                                 <th>Catégorie</th>
+                                <th>Note</th>
                                 <th>Stock</th>
                                 <th>Seuil</th>
                                 <th>Prix vente</th>
-                                <th>État</th>
+                                <th class="no-table-icon">État</th>
                             </tr>
                         </thead>
                         <tbody>
                             <tr v-for="product in filteredProducts" :key="product.id">
-                                <td><strong>{{ product.name }}</strong><small>{{ product.unit }}</small></td>
+                                <td><strong>{{ product.name }}</strong></td>
                                 <td>{{ product.category?.name || 'Non classé' }}</td>
+                                <td>{{ product.notes || '-' }}</td>
                                 <td>{{ product.stock_quantity }}</td>
                                 <td>{{ product.alert_threshold }}</td>
                                 <td>{{ formatMoney(product.sale_price) }}</td>
                                 <td><span :class="['status', isLow(product) ? 'danger' : 'ok']">{{ isLow(product) ? 'Stock bas' : 'OK' }}</span></td>
                             </tr>
                             <tr v-if="!filteredProducts.length">
-                                <td colspan="6" class="empty">Aucun produit ne correspond aux filtres.</td>
+                                <td colspan="7" class="empty">Aucun produit ne correspond aux filtres.</td>
                             </tr>
                         </tbody>
                     </table>
@@ -741,10 +1781,10 @@
                 <p v-if="profileMessage" class="message">{{ profileMessage }}</p>
             </section>
 
-            <div v-if="activeSection === 'sales' && !currentUserCanSell" class="customer-view-switch">
+            <div v-if="activeSection === 'sales' || activeSection === 'seller-sales'" class="customer-view-switch">
                 <button :class="['customer-switch-card', salesView === 'invoices' ? 'active' : '']" type="button" @click="salesView = 'invoices'">
                     <i class="fa-solid fa-receipt"></i>
-                    <span>Ventes</span>
+                    <span>Factures</span>
                     <strong>{{ formatMoney(filteredSalesTotal) }}</strong>
                 </button>
                 <button :class="['customer-switch-card', salesView === 'proformas' ? 'active' : '']" type="button" @click="salesView = 'proformas'">
@@ -758,7 +1798,7 @@
                 <div class="section-title">
                     <div>
                         <h2>{{ sellerSalesTitle }}</h2>
-                        <p>{{ currentUserCanSell ? 'Consultez uniquement les documents que vous avez créés.' : (salesView === 'proformas' ? 'Suivez les pro formas établies avant validation de vente.' : 'Suivez toutes les ventes effectuées par vos vendeurs.') }}</p>
+                        <p>{{ currentUserCanSell ? (salesView === 'proformas' ? 'Consultez les factures pro forma que vous avez émises.' : 'Consultez les factures de vente que vous avez émises.') : (salesView === 'proformas' ? 'Suivez les pro formas établies avant validation de vente.' : 'Suivez toutes les ventes effectuées par vos vendeurs.') }}</p>
                     </div>
                     <div class="section-actions">
                         <button class="btn btn-light" type="button" @click="showSalesPrintModal = true">
@@ -771,7 +1811,7 @@
                     <label>Rechercher
                         <input v-model="salesFilters.search" type="search" :placeholder="currentUserCanSell ? 'Facture ou client' : 'Facture, vendeur, client'">
                     </label>
-                    <label v-if="salesView !== 'proformas' && activeSection !== 'seller-proforma'">Paiement
+                    <label v-if="salesView !== 'proformas'">Paiement
                         <select v-model="salesFilters.payment">
                             <option value="">Tous les paiements</option>
                             <option value="cash">Espèces</option>
@@ -818,17 +1858,29 @@
                         </thead>
                         <tbody>
                             <tr v-for="sale in displayedSalesRows" :key="sale.id">
-                                <td>{{ formatDate(sale.sold_at) }}</td>
+                                <td>
+                                    <span class="table-date-stack">
+                                        <strong>{{ splitDateTime(sale.sold_at).date }}</strong>
+                                        <small>{{ splitDateTime(sale.sold_at).time }}</small>
+                                    </span>
+                                </td>
                                 <td><strong>{{ sale.number }}</strong><small>{{ sale.items.length }} ligne(s)</small></td>
-                                <td v-if="!currentUserCanSell"><strong>{{ sale.seller?.name || 'Vendeur' }}</strong><small>{{ sale.seller?.phone || '-' }}</small></td>
+                                <td v-if="!currentUserCanSell"><strong>{{ sellerDisplayName(sale.seller) }}</strong></td>
                                 <td>{{ sale.customer?.name || 'Client comptoir' }}</td>
                                 <td v-if="salesView !== 'proformas'">{{ paymentLabel(sale.payment_method) }}</td>
-                                <td v-if="salesView !== 'proformas'"><span class="status ok">{{ sale.status }}</span></td>
+                                <td v-if="salesView !== 'proformas'"><span :class="['status', saleStatusClass(sale.status)]">{{ saleStatusLabel(sale.status) }}</span></td>
                                 <td>{{ formatMoney(sale.total) }}</td>
-                                <td><a class="table-icon" :href="`/businesses/${businessId}/sales/${sale.id}/invoice`" target="_blank" title="Voir la facture" aria-label="Voir la facture"><i class="fa-solid fa-file-invoice"></i></a></td>
+                                <td>
+                                    <div class="row-actions">
+                                        <a class="table-icon" :href="`/businesses/${businessId}/sales/${sale.id}/invoice`" target="_blank" title="Voir la facture" aria-label="Voir la facture"><i class="fa-solid fa-file-invoice"></i></a>
+                                        <button v-if="canCancelSaleFromTable(sale)" class="table-icon danger-icon" type="button" @click="openSaleCancelModal(sale)" title="Annuler la commande" aria-label="Annuler la commande">
+                                            <i class="fa-solid fa-ban"></i>
+                                        </button>
+                                    </div>
+                                </td>
                             </tr>
                             <tr v-if="!displayedSalesRows.length">
-                                <td :colspan="salesEmptyColspan" class="empty">{{ salesView === 'proformas' || activeSection === 'seller-proforma' ? 'Aucune facture pro forma ne correspond aux filtres.' : 'Aucune vente ne correspond aux filtres.' }}</td>
+                                <td :colspan="salesEmptyColspan" class="empty">{{ salesView === 'proformas' ? 'Aucune facture pro forma ne correspond aux filtres.' : 'Aucune vente ne correspond aux filtres.' }}</td>
                             </tr>
                         </tbody>
                     </table>
@@ -885,11 +1937,40 @@
                 </section>
             </div>
 
+            <div v-if="showSaleCancelModal" class="modal-backdrop" @click.self="closeSaleCancelModal">
+                <section class="choice-modal">
+                    <div class="section-title">
+                        <div>
+                            <h2><i class="fa-solid fa-ban"></i>Annuler la commande</h2>
+                            <p>{{ saleToCancel?.number || 'Facture' }} - {{ formatMoney(saleToCancel?.total || 0) }}</p>
+                        </div>
+                        <button class="table-icon" type="button" @click="closeSaleCancelModal" title="Fermer" aria-label="Fermer">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+                    <form class="payment-modal-form" @submit.prevent="cancelSale">
+                        <label class="full">Motif de l’annulation
+                            <textarea v-model="saleCancelForm.reason" rows="4" required placeholder="Exemple : erreur de produit, erreur de quantité, client désiste..."></textarea>
+                        </label>
+                        <p class="muted full">Le stock sera réajusté automatiquement. Une commande à crédit ne peut pas être annulée si le client a déjà commencé à payer.</p>
+                        <div class="choice-actions full">
+                            <button class="btn btn-light" type="button" @click="closeSaleCancelModal">
+                                <i class="fa-solid fa-xmark"></i>Retour
+                            </button>
+                            <button class="btn btn-primary" type="submit" :disabled="savingSaleCancel">
+                                <i class="fa-solid fa-check"></i>{{ savingSaleCancel ? 'Annulation...' : 'Confirmer l’annulation' }}
+                            </button>
+                        </div>
+                    </form>
+                    <p v-if="saleCancelMessage" class="message">{{ saleCancelMessage }}</p>
+                </section>
+            </div>
+
             <div v-if="showSalesPrintModal" class="modal-backdrop" @click.self="showSalesPrintModal = false">
                 <section class="choice-modal">
                     <div class="section-title">
                         <div>
-                            <h2>Imprimer</h2>
+                            <h2 class="sale-confirm-title"><i class="fa-solid fa-print"></i>Imprimer</h2>
                             <p>Choisissez le format d’impression des ventes affichées.</p>
                         </div>
                         <button class="table-icon" type="button" @click="showSalesPrintModal = false" title="Fermer" aria-label="Fermer">
@@ -897,10 +1978,10 @@
                         </button>
                     </div>
                     <div class="segmented-actions">
-                        <button class="btn btn-light" type="button" @click="chooseSalesPrint('pdf')">
+                        <button class="btn btn-pdf" type="button" @click="chooseSalesPrint('pdf')">
                             <i class="fa-solid fa-file-pdf"></i>PDF
                         </button>
-                        <button class="btn btn-light" type="button" @click="chooseSalesPrint('excel')">
+                        <button class="btn btn-excel" type="button" @click="chooseSalesPrint('excel')">
                             <i class="fa-solid fa-file-excel"></i>Excel
                         </button>
                     </div>
@@ -923,7 +2004,7 @@
             <section v-if="activeSection === 'customers' && customerView === 'receivables'" class="card receivables-section">
                 <div class="section-title">
                     <div>
-                        <h2>Créances</h2>
+                        <h2><span class="section-title-icon"><i class="fa-solid fa-hand-holding-dollar"></i></span>Créances</h2>
                         <p>Montants dus, factures associées, relances et paiements clients.</p>
                     </div>
                     <div class="section-actions">
@@ -978,27 +2059,18 @@
                                 <th>Échéance</th>
                                 <th>Client</th>
                                 <th>Montant dû</th>
-                                <th>Payé</th>
                                 <th>Reste</th>
                                 <th>Statut</th>
-                                <th>Facture</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
                             <tr v-for="receivable in filteredReceivables" :key="receivable.id">
                                 <td>{{ formatDateOnly(receivable.due_date) }}</td>
-                                <td><strong>{{ receivable.customer?.name || 'Client' }}</strong><small>{{ receivable.customer?.phone || 'Téléphone non renseigné' }}</small></td>
+                                <td><strong>{{ receivable.customer?.name || 'Client' }}</strong></td>
                                 <td>{{ formatMoney(receivable.amount_due) }}</td>
-                                <td>{{ formatMoney(receivable.amount_paid) }}</td>
                                 <td>{{ formatMoney(receivable.remaining) }}</td>
                                 <td><span :class="['status', receivableStatusClass(receivable.status)]">{{ receivableStatusLabel(receivable.status) }}</span></td>
-                                <td>
-                                    <a v-if="receivable.invoice" class="table-link" :href="`/businesses/${businessId}/sales/${receivable.invoice.id}/invoice`" target="_blank">
-                                        {{ receivable.invoice.number }}
-                                    </a>
-                                    <span v-else>-</span>
-                                </td>
                                 <td>
                                     <div class="row-actions">
                                         <button class="table-icon" type="button" @click="openReceivableDetails(receivable)" title="Voir la situation" aria-label="Voir la situation">
@@ -1017,7 +2089,7 @@
                                 </td>
                             </tr>
                             <tr v-if="!filteredReceivables.length">
-                                <td colspan="8" class="empty">Aucune créance client ne correspond aux filtres.</td>
+                                <td colspan="6" class="empty">Aucune créance client ne correspond aux filtres.</td>
                             </tr>
                         </tbody>
                     </table>
@@ -1036,7 +2108,7 @@
                 <div class="section-title">
                     <div>
                         <h2>Clients</h2>
-                        <p>Fiches clients, achats, factures et situation des comptes.</p>
+                        <p>Fiches clients, achats et situation des comptes.</p>
                     </div>
                     <div class="section-actions">
                         <button class="btn btn-primary" type="button" @click="openCustomerCreateModal">
@@ -1050,7 +2122,7 @@
 
                 <div class="filters-grid">
                     <label>Rechercher
-                        <input v-model="customerFilters.search" type="search" placeholder="Nom, téléphone ou facture">
+                        <input v-model="customerFilters.search" type="search" placeholder="Nom ou téléphone">
                     </label>
                     <label>Situation
                         <select v-model="customerFilters.situation">
@@ -1064,7 +2136,6 @@
                             <option value="name_asc">Client A-Z</option>
                             <option value="purchases_desc">Achats décroissants</option>
                             <option value="debt_desc">Créances décroissantes</option>
-                            <option value="invoices_desc">Nombre de factures</option>
                         </select>
                     </label>
                 </div>
@@ -1083,28 +2154,16 @@
                                 <th>Achats</th>
                                 <th>Créances</th>
                                 <th>Situation</th>
-                                <th>Factures</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
                             <tr v-for="client in filteredCustomers" :key="client.key">
                                 <td><strong>{{ client.name }}</strong><small>{{ client.email || client.address || '-' }}</small></td>
-                                <td>{{ client.phone || '-' }}</td>
+                                <td>{{ formatPhoneDisplay(client.phone) }}</td>
                                 <td>{{ formatMoney(client.totalPurchases) }}</td>
                                 <td>{{ formatMoney(client.remainingDebt) }}</td>
                                 <td><span :class="['status', client.hasDebt ? 'danger' : 'ok']">{{ client.situation }}</span></td>
-                                <td>
-                                    <div class="invoice-cell">
-                                        <div v-for="invoice in client.invoices" :key="invoice.id" class="invoice-mini-row">
-                                            <a :href="`/businesses/${businessId}/sales/${invoice.id}/invoice`" target="_blank">{{ invoice.number }}</a>
-                                            <span>{{ formatMoney(invoice.total) }}</span>
-                                            <small>{{ formatDate(invoice.sold_at) }} - {{ paymentLabel(invoice.payment_method) }}</small>
-                                            <small v-if="invoice.items.length">{{ invoiceDetails(invoice) }}</small>
-                                        </div>
-                                        <span v-if="!client.invoices.length">Aucune facture récente</span>
-                                    </div>
-                                </td>
                                 <td>
                                     <div class="row-actions">
                                         <button class="table-icon" type="button" @click="openCustomerDetails(client)" title="Voir la fiche complète" aria-label="Voir la fiche complète">
@@ -1122,11 +2181,14 @@
                                         <button v-else class="table-icon" type="button" disabled title="WhatsApp indisponible" aria-label="WhatsApp indisponible">
                                             <i class="fa-brands fa-whatsapp"></i>
                                         </button>
+                                        <button class="table-icon" type="button" @click="openCustomerPhoneEdit(client)" title="Modifier le téléphone" aria-label="Modifier le téléphone">
+                                            <i class="fa-solid fa-pen-to-square"></i>
+                                        </button>
                                     </div>
                                 </td>
                             </tr>
                             <tr v-if="!filteredCustomers.length">
-                                <td colspan="7" class="empty">Aucun client ne correspond aux filtres.</td>
+                                <td colspan="6" class="empty">Aucun client ne correspond aux filtres.</td>
                             </tr>
                         </tbody>
                     </table>
@@ -1177,9 +2239,12 @@
                 <section class="choice-modal">
                     <div class="section-title">
                         <div>
-                            <h2 class="large-modal-title">Situation créance</h2>
+                            <h2 class="large-modal-title"><i class="fa-solid fa-hand-holding-dollar"></i>Situation créance</h2>
                         </div>
                         <div class="row-actions">
+                            <a v-if="selectedReceivableDetails?.invoice?.id" class="table-icon" :href="receivableInvoiceUrl(selectedReceivableDetails)" target="_blank" title="Voir la facture" aria-label="Voir la facture">
+                                <i class="fa-solid fa-file-invoice"></i>
+                            </a>
                             <button class="table-icon" type="button" @click="showReceivableDetailsPrintModal = true" title="Imprimer" aria-label="Imprimer">
                                 <i class="fa-solid fa-print"></i>
                             </button>
@@ -1219,7 +2284,7 @@
                 <section class="choice-modal">
                     <div class="section-title">
                         <div>
-                            <h2>Imprimer</h2>
+                            <h2 class="sale-confirm-title"><i class="fa-solid fa-print"></i>Imprimer</h2>
                             <p>Choisissez le format d’impression de cette créance.</p>
                         </div>
                         <button class="table-icon" type="button" @click="showReceivableDetailsPrintModal = false" title="Fermer" aria-label="Fermer">
@@ -1227,10 +2292,10 @@
                         </button>
                     </div>
                     <div class="segmented-actions">
-                        <button class="btn btn-light" type="button" @click="chooseReceivableDetailsPrint('pdf')">
+                        <button class="btn btn-pdf" type="button" @click="chooseReceivableDetailsPrint('pdf')">
                             <i class="fa-solid fa-file-pdf"></i>PDF
                         </button>
-                        <button class="btn btn-light" type="button" @click="chooseReceivableDetailsPrint('excel')">
+                        <button class="btn btn-excel" type="button" @click="chooseReceivableDetailsPrint('excel')">
                             <i class="fa-solid fa-file-excel"></i>Excel
                         </button>
                     </div>
@@ -1305,7 +2370,7 @@
                         <label>Client existant
                             <select v-model="receivableForm.customer_id">
                                 <option value="">Nouveau client</option>
-                                <option v-for="customer in customers" :key="customer.id" :value="customer.id">{{ customer.name }} - {{ customer.phone || 'sans téléphone' }}</option>
+                                <option v-for="customer in customers" :key="customer.id" :value="customer.id">{{ customer.name }} - {{ customer.phone ? formatPhoneDisplay(customer.phone) : 'sans téléphone' }}</option>
                             </select>
                         </label>
                         <template v-if="!receivableForm.customer_id">
@@ -1340,8 +2405,8 @@
                 </section>
             </div>
 
-            <div v-if="showCustomerCreateModal" class="modal-backdrop" @click.self="showCustomerCreateModal = false">
-                <section class="choice-modal">
+            <div v-if="showCustomerCreateModal" class="modal-backdrop customer-create-backdrop" @click.self="showCustomerCreateModal = false">
+                <section class="choice-modal customer-create-modal">
                     <div class="section-title">
                         <div>
                             <h2 class="large-modal-title">Nouveau client</h2>
@@ -1361,10 +2426,10 @@
                             </span>
                         </label>
                         <div class="choice-actions">
-                            <button class="btn btn-primary" type="button" @click="showCustomerCreateModal = false">
+                            <button class="btn btn-light" type="button" @click="showCustomerCreateModal = false">
                                 <i class="fa-solid fa-xmark"></i>Annuler
                             </button>
-                            <button class="btn btn-light" type="submit" :disabled="savingCustomer">
+                            <button class="btn btn-primary" type="submit" :disabled="savingCustomer">
                                 <i class="fa-solid fa-check"></i>{{ savingCustomer ? 'Enregistrement...' : 'Enregistrer' }}
                             </button>
                         </div>
@@ -1372,11 +2437,43 @@
                 </section>
             </div>
 
+            <div v-if="showCustomerPhoneEditModal" class="modal-backdrop" @click.self="closeCustomerPhoneEdit">
+                <section class="choice-modal">
+                    <div class="section-title">
+                        <div>
+                            <h2>Modifier téléphone</h2>
+                            <p>{{ editingCustomer?.name || 'Client' }}</p>
+                        </div>
+                        <button class="table-icon" type="button" @click="closeCustomerPhoneEdit" title="Fermer" aria-label="Fermer">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+
+                    <form class="payment-modal-form" @submit.prevent="updateCustomerPhone">
+                        <label>Téléphone
+                            <span class="phone-field">
+                                <span>01</span>
+                                <input :value="phoneInputValue(customerPhoneForm.phone)" type="tel" required inputmode="numeric" maxlength="8" pattern="\d{8}" placeholder="96228860" @input="customerPhoneForm.phone = phoneWithPrefix($event.target.value)">
+                            </span>
+                        </label>
+                        <div class="choice-actions">
+                            <button class="btn btn-light" type="button" @click="closeCustomerPhoneEdit">
+                                <i class="fa-solid fa-xmark"></i>Annuler
+                            </button>
+                            <button class="btn btn-primary" type="submit" :disabled="savingCustomer">
+                                <i class="fa-solid fa-check"></i>{{ savingCustomer ? 'Enregistrement...' : 'Enregistrer' }}
+                            </button>
+                        </div>
+                    </form>
+                    <p v-if="receivableMessage" class="message">{{ receivableMessage }}</p>
+                </section>
+            </div>
+
             <div v-if="showCustomerPrintModal" class="modal-backdrop" @click.self="showCustomerPrintModal = false">
                 <section class="choice-modal">
                     <div class="section-title">
                         <div>
-                            <h2>Imprimer</h2>
+                            <h2 class="sale-confirm-title"><i class="fa-solid fa-print"></i>Imprimer</h2>
                             <p>Choisissez le format d’impression des clients affichés.</p>
                         </div>
                         <button class="table-icon" type="button" @click="showCustomerPrintModal = false" title="Fermer" aria-label="Fermer">
@@ -1384,10 +2481,10 @@
                         </button>
                     </div>
                     <div class="segmented-actions">
-                        <button class="btn btn-light" type="button" @click="chooseCustomerPrint('pdf')">
+                        <button class="btn btn-pdf" type="button" @click="chooseCustomerPrint('pdf')">
                             <i class="fa-solid fa-file-pdf"></i>PDF
                         </button>
-                        <button class="btn btn-light" type="button" @click="chooseCustomerPrint('excel')">
+                        <button class="btn btn-excel" type="button" @click="chooseCustomerPrint('excel')">
                             <i class="fa-solid fa-file-excel"></i>Excel
                         </button>
                     </div>
@@ -1398,15 +2495,21 @@
                 <section class="choice-modal customer-detail-modal">
                     <div class="section-title">
                         <div>
-                            <h2 class="large-modal-title">Fiche client</h2>
+                            <h2 class="large-modal-title"><i class="fa-solid fa-user"></i>Fiche client</h2>
+                            <p>{{ selectedCustomerDetails?.name || 'Client' }}</p>
                         </div>
-                        <button class="table-icon" type="button" @click="closeCustomerDetails" title="Fermer" aria-label="Fermer">
-                            <i class="fa-solid fa-xmark"></i>
-                        </button>
+                        <div class="row-actions">
+                            <button class="table-icon" type="button" @click="printCustomerDetails" title="Imprimer" aria-label="Imprimer">
+                                <i class="fa-solid fa-print"></i>
+                            </button>
+                            <button class="table-icon" type="button" @click="closeCustomerDetails" title="Fermer" aria-label="Fermer">
+                                <i class="fa-solid fa-xmark"></i>
+                            </button>
+                        </div>
                     </div>
                     <div class="receivable-detail-grid">
                         <div><span>Client</span><strong>{{ selectedCustomerDetails?.name || 'Client' }}</strong></div>
-                        <div><span>Téléphone</span><strong>{{ selectedCustomerDetails?.phone || '-' }}</strong></div>
+                        <div><span>Téléphone</span><strong>{{ formatPhoneDisplay(selectedCustomerDetails?.phone) }}</strong></div>
                         <div><span>Total achats</span><strong>{{ formatMoney(selectedCustomerDetails?.totalPurchases || 0) }}</strong></div>
                         <div><span>Créances</span><strong>{{ formatMoney(selectedCustomerDetails?.remainingDebt || 0) }}</strong></div>
                         <div><span>Situation</span><strong>{{ selectedCustomerDetails?.situation || '-' }}</strong></div>
@@ -1497,7 +2600,7 @@
                 <section class="choice-modal">
                     <div class="section-title">
                         <div>
-                            <h2>Imprimer</h2>
+                            <h2 class="sale-confirm-title"><i class="fa-solid fa-print"></i>Imprimer</h2>
                             <p>Choisissez le format d’impression des créances affichées.</p>
                         </div>
                         <button class="table-icon" type="button" @click="showReceivablePrintModal = false" title="Fermer" aria-label="Fermer">
@@ -1505,10 +2608,10 @@
                         </button>
                     </div>
                     <div class="segmented-actions">
-                        <button class="btn btn-light" type="button" @click="chooseReceivablePrint('pdf')">
+                        <button class="btn btn-pdf" type="button" @click="chooseReceivablePrint('pdf')">
                             <i class="fa-solid fa-file-pdf"></i>PDF
                         </button>
-                        <button class="btn btn-light" type="button" @click="chooseReceivablePrint('excel')">
+                        <button class="btn btn-excel" type="button" @click="chooseReceivablePrint('excel')">
                             <i class="fa-solid fa-file-excel"></i>Excel
                         </button>
                     </div>
@@ -1586,7 +2689,6 @@
                                 <th>Échéance</th>
                                 <th>Fournisseur</th>
                                 <th>Montant dû</th>
-                                <th>Payé</th>
                                 <th>Reste</th>
                                 <th>Statut</th>
                                 <th>Actions</th>
@@ -1595,9 +2697,8 @@
                         <tbody>
                             <tr v-for="debt in filteredSupplierDebts" :key="debt.id">
                                 <td>{{ formatDateOnly(debt.due_date) }}</td>
-                                <td><strong>{{ debt.supplier?.name || 'Fournisseur' }}</strong><small>{{ debt.supplier?.phone || 'Téléphone non renseigné' }}</small></td>
+                                <td><strong>{{ debt.supplier?.name || 'Fournisseur' }}</strong></td>
                                 <td>{{ formatMoney(debt.amount_due) }}</td>
-                                <td>{{ formatMoney(debt.amount_paid) }}</td>
                                 <td>{{ formatMoney(debt.remaining) }}</td>
                                 <td><span :class="['status', receivableStatusClass(debt.status)]">{{ receivableStatusLabel(debt.status) }}</span></td>
                                 <td>
@@ -1618,7 +2719,7 @@
                                 </td>
                             </tr>
                             <tr v-if="!filteredSupplierDebts.length">
-                                <td colspan="7" class="empty">Aucune dette fournisseur ne correspond aux filtres.</td>
+                                <td colspan="6" class="empty">Aucune dette fournisseur ne correspond aux filtres.</td>
                             </tr>
                         </tbody>
                     </table>
@@ -1670,11 +2771,16 @@
                 <section class="choice-modal">
                     <div class="section-title">
                         <div>
-                            <h2 class="large-modal-title">Situation dette</h2>
+                            <h2 class="large-modal-title"><i class="fa-solid fa-file-invoice-dollar"></i>Situation dette</h2>
                         </div>
-                        <button class="table-icon" type="button" @click="closeSupplierDebtDetails" title="Fermer" aria-label="Fermer">
-                            <i class="fa-solid fa-xmark"></i>
-                        </button>
+                        <div class="row-actions">
+                            <button class="table-icon" type="button" @click="printSupplierDebtDetails" title="Imprimer" aria-label="Imprimer">
+                                <i class="fa-solid fa-print"></i>
+                            </button>
+                            <button class="table-icon" type="button" @click="closeSupplierDebtDetails" title="Fermer" aria-label="Fermer">
+                                <i class="fa-solid fa-xmark"></i>
+                            </button>
+                        </div>
                     </div>
                     <div class="receivable-detail-grid">
                         <div><span>Fournisseur</span><strong>{{ selectedSupplierDebtDetails?.supplier?.name || 'Fournisseur' }}</strong></div>
@@ -1813,7 +2919,7 @@
                         <tbody>
                             <tr v-for="supplier in filteredSuppliers" :key="supplier.key">
                                 <td><strong>{{ supplier.name }}</strong></td>
-                                <td>{{ supplier.phone || '-' }}</td>
+                                <td>{{ formatPhoneDisplay(supplier.phone) }}</td>
                                 <td>{{ formatMoney(supplier.totalDebt) }}</td>
                                 <td>{{ formatMoney(supplier.remainingDebt) }}</td>
                                 <td><span :class="['status', supplier.hasDebt ? 'danger' : 'ok']">{{ supplier.situation }}</span></td>
@@ -1859,19 +2965,27 @@
                 <section class="choice-modal customer-detail-modal">
                     <div class="section-title">
                         <div>
-                            <h2 class="large-modal-title">Fiche fournisseur</h2>
+                            <h2 class="large-modal-title"><i class="fa-solid fa-truck-field"></i>Fiche fournisseur</h2>
+                            <p>{{ selectedSupplierDetails?.name || 'Fournisseur' }}</p>
                         </div>
-                        <button class="table-icon" type="button" @click="closeSupplierDetails" title="Fermer" aria-label="Fermer">
-                            <i class="fa-solid fa-xmark"></i>
-                        </button>
+                        <div class="row-actions">
+                            <button class="table-icon" type="button" @click="printSupplierDetails" title="Imprimer" aria-label="Imprimer">
+                                <i class="fa-solid fa-print"></i>
+                            </button>
+                            <button class="table-icon" type="button" @click="closeSupplierDetails" title="Fermer" aria-label="Fermer">
+                                <i class="fa-solid fa-xmark"></i>
+                            </button>
+                        </div>
                     </div>
                     <div class="receivable-detail-grid">
                         <div><span>Fournisseur</span><strong>{{ selectedSupplierDetails?.name || 'Fournisseur' }}</strong></div>
-                        <div><span>Téléphone</span><strong>{{ selectedSupplierDetails?.phone || '-' }}</strong></div>
+                        <div><span>Téléphone</span><strong>{{ formatPhoneDisplay(selectedSupplierDetails?.phone) }}</strong></div>
                         <div><span>Total dû</span><strong>{{ formatMoney(selectedSupplierDetails?.totalDebt || 0) }}</strong></div>
                         <div><span>Dettes</span><strong>{{ formatMoney(selectedSupplierDetails?.remainingDebt || 0) }}</strong></div>
+                        <div><span>Montant payé</span><strong>{{ formatMoney(supplierPaidTotal(selectedSupplierDetails)) }}</strong></div>
                         <div><span>Situation</span><strong>{{ selectedSupplierDetails?.situation || '-' }}</strong></div>
                         <div><span>Nombre de dettes</span><strong>{{ selectedSupplierDetails?.debts?.length || 0 }}</strong></div>
+                        <div><span>Prochaine échéance</span><strong>{{ supplierNextDueDate(selectedSupplierDetails) }}</strong></div>
                     </div>
                     <div v-if="selectedSupplierDetails?.notes" class="receivable-notes">
                         <strong>Note</strong>
@@ -1893,6 +3007,7 @@
                                 <span>{{ receivableStatusLabel(debt.status) }}</span>
                             </div>
                             <small>Initial : {{ formatMoney(debt.amount_due) }} - Payé : {{ formatMoney(debt.amount_paid) }} - Échéance : {{ formatDateOnly(debt.due_date) }}</small>
+                            <small v-if="debt.notes">Note : {{ debt.notes }}</small>
                         </div>
                         <p v-if="!(selectedSupplierDetails?.debts || []).length" class="empty small-empty">Aucune dette récente.</p>
                     </div>
@@ -1915,7 +3030,7 @@
                         <label>Fournisseur existant
                             <select v-model="supplierDebtForm.supplier_id">
                                 <option value="">Nouveau fournisseur</option>
-                                <option v-for="supplier in suppliers" :key="supplier.id" :value="supplier.id">{{ supplier.name }} - {{ supplier.phone || 'sans téléphone' }}</option>
+                                <option v-for="supplier in suppliers" :key="supplier.id" :value="supplier.id">{{ supplier.name }} - {{ supplier.phone ? formatPhoneDisplay(supplier.phone) : 'sans téléphone' }}</option>
                             </select>
                         </label>
                         <template v-if="!supplierDebtForm.supplier_id">
@@ -2067,7 +3182,7 @@
                 <section class="choice-modal">
                     <div class="section-title">
                         <div>
-                            <h2>Imprimer</h2>
+                            <h2 class="sale-confirm-title"><i class="fa-solid fa-print"></i>Imprimer</h2>
                             <p>Choisissez le format d’impression des dettes affichées.</p>
                         </div>
                         <button class="table-icon" type="button" @click="showSupplierDebtPrintModal = false" title="Fermer" aria-label="Fermer">
@@ -2075,10 +3190,10 @@
                         </button>
                     </div>
                     <div class="segmented-actions">
-                        <button class="btn btn-light" type="button" @click="chooseSupplierDebtPrint('pdf')">
+                        <button class="btn btn-pdf" type="button" @click="chooseSupplierDebtPrint('pdf')">
                             <i class="fa-solid fa-file-pdf"></i>PDF
                         </button>
-                        <button class="btn btn-light" type="button" @click="chooseSupplierDebtPrint('excel')">
+                        <button class="btn btn-excel" type="button" @click="chooseSupplierDebtPrint('excel')">
                             <i class="fa-solid fa-file-excel"></i>Excel
                         </button>
                     </div>
@@ -2089,7 +3204,7 @@
                 <section class="choice-modal">
                     <div class="section-title">
                         <div>
-                            <h2>Imprimer</h2>
+                            <h2 class="sale-confirm-title"><i class="fa-solid fa-print"></i>Imprimer</h2>
                             <p>Choisissez le format d’impression des fournisseurs affichés.</p>
                         </div>
                         <button class="table-icon" type="button" @click="showSupplierPrintModal = false" title="Fermer" aria-label="Fermer">
@@ -2097,10 +3212,10 @@
                         </button>
                     </div>
                     <div class="segmented-actions">
-                        <button class="btn btn-light" type="button" @click="chooseSupplierPrint('pdf')">
+                        <button class="btn btn-pdf" type="button" @click="chooseSupplierPrint('pdf')">
                             <i class="fa-solid fa-file-pdf"></i>PDF
                         </button>
-                        <button class="btn btn-light" type="button" @click="chooseSupplierPrint('excel')">
+                        <button class="btn btn-excel" type="button" @click="chooseSupplierPrint('excel')">
                             <i class="fa-solid fa-file-excel"></i>Excel
                         </button>
                     </div>
@@ -2174,18 +3289,29 @@
                                 <th>Catégorie</th>
                                 <th>Montant</th>
                                 <th>Notes</th>
+                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
                             <tr v-for="expense in filteredExpenses" :key="expense.id">
-                                <td>{{ formatDate(expense.created_at) }}</td>
+                                <td>{{ formatDateOnly(expense.spent_on) }}</td>
                                 <td><strong>{{ expense.name }}</strong></td>
                                 <td>{{ expense.category }}</td>
                                 <td>{{ formatMoney(expense.amount) }}</td>
                                 <td>{{ expense.notes || '-' }}</td>
+                                <td>
+                                    <div class="row-actions">
+                                        <button class="table-icon" type="button" @click="openExpenseModal(expense)" title="Modifier" aria-label="Modifier">
+                                            <i class="fa-solid fa-pen-to-square"></i>
+                                        </button>
+                                        <button class="table-icon danger-icon" type="button" @click="deleteExpense(expense)" title="Supprimer" aria-label="Supprimer">
+                                            <i class="fa-solid fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </td>
                             </tr>
                             <tr v-if="!filteredExpenses.length">
-                                <td colspan="5" class="empty">Aucune charge ne correspond aux filtres.</td>
+                                <td colspan="6" class="empty">Aucune charge ne correspond aux filtres.</td>
                             </tr>
                         </tbody>
                     </table>
@@ -2240,7 +3366,7 @@
                 <section class="choice-modal">
                     <div class="section-title">
                         <div>
-                            <h2>Imprimer</h2>
+                            <h2 class="sale-confirm-title"><i class="fa-solid fa-print"></i>Imprimer</h2>
                             <p>Choisissez le format d’impression des charges affichées.</p>
                         </div>
                         <button class="table-icon" type="button" @click="showExpensePrintModal = false" title="Fermer" aria-label="Fermer">
@@ -2248,23 +3374,23 @@
                         </button>
                     </div>
                     <div class="segmented-actions">
-                        <button class="btn btn-light" type="button" @click="chooseExpensePrint('pdf')">
+                        <button class="btn btn-pdf" type="button" @click="chooseExpensePrint('pdf')">
                             <i class="fa-solid fa-file-pdf"></i>PDF
                         </button>
-                        <button class="btn btn-light" type="button" @click="chooseExpensePrint('excel')">
+                        <button class="btn btn-excel" type="button" @click="chooseExpensePrint('excel')">
                             <i class="fa-solid fa-file-excel"></i>Excel
                         </button>
                     </div>
                 </section>
             </div>
 
-            <div v-if="showExpenseModal" class="modal-backdrop" @click.self="showExpenseModal = false">
+            <div v-if="showExpenseModal" class="modal-backdrop" @click.self="closeExpenseModal">
                 <section class="form-modal">
                     <div class="section-title">
                         <div class="modal-title-block">
-                            <h2>Nouvelle charge</h2>
+                            <h2>{{ editingExpense ? 'Modifier charge' : 'Nouvelle charge' }}</h2>
                         </div>
-                        <button class="table-icon" type="button" @click="showExpenseModal = false" title="Fermer" aria-label="Fermer">
+                        <button class="table-icon" type="button" @click="closeExpenseModal" title="Fermer" aria-label="Fermer">
                             <i class="fa-solid fa-xmark"></i>
                         </button>
                     </div>
@@ -2297,7 +3423,7 @@
                             <input v-model="expenseForm.notes" type="text" placeholder="Optionnel">
                         </label>
                         <button class="btn btn-primary" type="submit" :disabled="savingExpense">
-                            <i class="fa-solid fa-plus"></i>{{ savingExpense ? 'Enregistrement...' : 'Ajouter la charge' }}
+                            <i class="fa-solid fa-plus"></i>{{ savingExpense ? 'Enregistrement...' : (editingExpense ? 'Modifier la charge' : 'Ajouter la charge') }}
                         </button>
                     </form>
                     <p v-if="expenseMessage" class="message">{{ expenseMessage }}</p>
@@ -2312,7 +3438,7 @@
                 </button>
                 <button :class="['customer-switch-card', employeeView === 'payroll' ? 'active' : '']" type="button" @click="employeeView = 'payroll'">
                     <i class="fa-solid fa-file-invoice-dollar"></i>
-                    <span>Paie</span>
+                    <span>Paie & Avance</span>
                     <strong>{{ formatMoney(filteredPayrollsTotal) }}</strong>
                 </button>
             </div>
@@ -2405,7 +3531,7 @@
             <section v-if="activeSection === 'employees' && employeeView === 'payroll'" class="card payroll-section">
                 <div class="section-title">
                     <div>
-                        <h2>Paie</h2>
+                        <h2>Paie & Avance</h2>
                     </div>
                     <div class="section-actions">
                         <button v-if="payrollSubView === 'payrolls'" class="btn btn-primary" type="button" @click="openPayrollModal">
@@ -2479,7 +3605,7 @@
                                 <td>{{ formatMoney(payroll.gross_salary) }}</td>
                                 <td>{{ formatMoney(payroll.salary_advance) }}</td>
                                 <td><strong>{{ formatMoney(payroll.net_salary) }}</strong></td>
-                                <td><span class="status ok">{{ payroll.status }}</span></td>
+                                <td><span class="status ok">{{ payrollStatusLabel(payroll.status) }}</span></td>
                             </tr>
                             <tr v-if="!filteredPayrolls.length">
                                 <td colspan="6" class="empty">Aucune paie ne correspond aux filtres.</td>
@@ -2668,21 +3794,24 @@
                 <section class="choice-modal customer-detail-modal">
                     <div class="section-title">
                         <div>
-                            <h2>Fiche employé</h2>
+                            <h2><i class="fa-solid fa-user-tie"></i>Fiche employé</h2>
                             <p>{{ selectedEmployeeDetails?.name || 'Employé' }}</p>
                         </div>
-                        <button class="table-icon" type="button" @click="closeEmployeeDetails" title="Fermer" aria-label="Fermer">
-                            <i class="fa-solid fa-xmark"></i>
-                        </button>
+                        <div class="row-actions">
+                            <button class="table-icon" type="button" @click="printEmployeeDetails" title="Imprimer" aria-label="Imprimer">
+                                <i class="fa-solid fa-print"></i>
+                            </button>
+                            <button class="table-icon" type="button" @click="closeEmployeeDetails" title="Fermer" aria-label="Fermer">
+                                <i class="fa-solid fa-xmark"></i>
+                            </button>
+                        </div>
                     </div>
                     <div class="receivable-detail-grid">
                         <div><span>Nom</span><strong>{{ selectedEmployeeDetails?.name || '-' }}</strong></div>
-                        <div><span>Téléphone</span><strong>{{ selectedEmployeeDetails?.user?.phone || '-' }}</strong></div>
+                        <div><span>Téléphone</span><strong>{{ formatPhoneDisplay(selectedEmployeeDetails?.user?.phone) }}</strong></div>
                         <div><span>Nom d'utilisateur</span><strong>{{ selectedEmployeeDetails?.user?.username || '-' }}</strong></div>
-                        <div><span>Poste</span><strong>{{ selectedEmployeeDetails?.position || '-' }}</strong></div>
                         <div><span>Type de compte</span><strong>{{ employeeTypeLabel(selectedEmployeeDetails?.type) }}</strong></div>
                         <div><span>Salaire mensuel</span><strong>{{ formatMoney(selectedEmployeeDetails?.salary || 0) }}</strong></div>
-                        <div><span>Paiement salaire habituel</span><strong>{{ formatDayMonth(selectedEmployeeDetails?.salary_payment_date) }}</strong></div>
                         <div><span>Date d'embauche</span><strong>{{ formatDateOnly(selectedEmployeeDetails?.hired_at) }}</strong></div>
                         <div><span>Statut</span><strong>{{ selectedEmployeeDetails?.is_active ? 'Actif' : 'Inactif' }}</strong></div>
                     </div>
@@ -2791,7 +3920,7 @@
                             <div><span>Avances trouvées</span><strong>{{ selectedPayrollAdvances.length }}</strong></div>
                         </div>
                         <label v-if="selectedPayrollEmployee">Salaire payé
-                            <input v-model.number="payrollForm.paid_amount" type="number" min="0" :placeholder="String(selectedPayrollNetEstimate)">
+                            <input v-model.number="payrollForm.paid_amount" type="number" min="0" :max="selectedPayrollNetEstimate" :placeholder="formatMoney(selectedPayrollNetEstimate)">
                         </label>
                         <div class="choice-actions">
                             <button class="btn btn-light" type="button" @click="showPayrollModal = false">
@@ -2808,14 +3937,14 @@
             <div v-if="showEmployeePrintModal" class="modal-backdrop" @click.self="showEmployeePrintModal = false">
                 <section class="choice-modal">
                     <div class="section-title">
-                        <div><h2>Imprimer</h2></div>
+                        <div><h2 class="sale-confirm-title"><i class="fa-solid fa-print"></i>Imprimer</h2></div>
                         <button class="table-icon" type="button" @click="showEmployeePrintModal = false" title="Fermer" aria-label="Fermer">
                             <i class="fa-solid fa-xmark"></i>
                         </button>
                     </div>
                     <div class="segmented-actions">
-                        <button class="btn btn-light" type="button" @click="printFilteredEmployees"><i class="fa-solid fa-file-pdf"></i>PDF</button>
-                        <button class="btn btn-primary" type="button" @click="exportFilteredEmployeesExcel"><i class="fa-solid fa-file-excel"></i>Excel</button>
+                        <button class="btn btn-pdf" type="button" @click="printFilteredEmployees"><i class="fa-solid fa-file-pdf"></i>PDF</button>
+                        <button class="btn btn-excel" type="button" @click="exportFilteredEmployeesExcel"><i class="fa-solid fa-file-excel"></i>Excel</button>
                     </div>
                 </section>
             </div>
@@ -2823,14 +3952,14 @@
             <div v-if="showPayrollPrintModal" class="modal-backdrop" @click.self="showPayrollPrintModal = false">
                 <section class="choice-modal">
                     <div class="section-title">
-                        <div><h2>Imprimer</h2></div>
+                        <div><h2 class="sale-confirm-title"><i class="fa-solid fa-print"></i>Imprimer</h2></div>
                         <button class="table-icon" type="button" @click="showPayrollPrintModal = false" title="Fermer" aria-label="Fermer">
                             <i class="fa-solid fa-xmark"></i>
                         </button>
                     </div>
                     <div class="segmented-actions">
-                        <button class="btn btn-light" type="button" @click="printFilteredPayrolls"><i class="fa-solid fa-file-pdf"></i>PDF</button>
-                        <button class="btn btn-primary" type="button" @click="exportFilteredPayrollsExcel"><i class="fa-solid fa-file-excel"></i>Excel</button>
+                        <button class="btn btn-pdf" type="button" @click="printFilteredPayrolls"><i class="fa-solid fa-file-pdf"></i>PDF</button>
+                        <button class="btn btn-excel" type="button" @click="exportFilteredPayrollsExcel"><i class="fa-solid fa-file-excel"></i>Excel</button>
                     </div>
                 </section>
             </div>
@@ -2868,6 +3997,9 @@
                             </label>
                             <label v-if="reportPeriod === 'custom'">Fin
                                 <input v-model="reportEndDate" type="date" required>
+                            </label>
+                            <label v-if="reportPeriod === 'exact'">Date
+                                <input v-model="reportExactDate" type="date" required>
                             </label>
                         </div>
                         <div class="report-actions">
@@ -2918,11 +4050,27 @@
                             <i class="fa-solid fa-xmark"></i>
                         </button>
                     </div>
+                    <div v-if="selectedDownload.kind === 'report'" class="report-form tax-period-form">
+                        <label>Type de période
+                            <select v-model="reportModalPeriod">
+                                <option v-for="period in reportPeriods" :key="period.value" :value="period.value">{{ period.label }}</option>
+                            </select>
+                        </label>
+                        <label v-if="reportModalPeriod === 'exact'">Date précise
+                            <input v-model="reportModalExactDate" type="date" required>
+                        </label>
+                        <label v-if="reportModalPeriod === 'custom'">Début
+                            <input v-model="reportModalStartDate" type="date" required>
+                        </label>
+                        <label v-if="reportModalPeriod === 'custom'">Fin
+                            <input v-model="reportModalEndDate" type="date" required>
+                        </label>
+                    </div>
                     <div class="segmented-actions">
-                        <button class="btn btn-light" type="button" @click="exportSelectedDownload('pdf')">
+                        <button class="btn btn-pdf" type="button" :disabled="!canExportSelectedDownload" @click="exportSelectedDownload('pdf')">
                             <i class="fa-solid fa-file-pdf"></i>PDF
                         </button>
-                        <button class="btn btn-primary" type="button" @click="exportSelectedDownload('excel')">
+                        <button class="btn btn-excel" type="button" :disabled="!canExportSelectedDownload" @click="exportSelectedDownload('excel')">
                             <i class="fa-solid fa-file-excel"></i>Excel
                         </button>
                     </div>
@@ -2937,13 +4085,57 @@
                             <p>Consultez le bilan auto-généré et les documents à transmettre au comptable.</p>
                         </div>
                     </div>
+                    <div class="report-form tax-period-form">
+                        <label>Période couverte
+                            <select v-model="taxPeriod">
+                                <option v-for="period in taxPeriods" :key="period.value" :value="period.value">{{ period.label }}</option>
+                            </select>
+                        </label>
+                        <label v-if="taxPeriod === 'custom'">Début
+                            <input v-model="taxStartDate" type="date" required>
+                        </label>
+                        <label v-if="taxPeriod === 'custom'">Fin
+                            <input v-model="taxEndDate" type="date" required>
+                        </label>
+                        <button class="btn btn-light" type="button" :disabled="!canApplyTaxPeriod" @click="loadTaxes">
+                            <i class="fa-solid fa-calendar-check"></i>Appliquer
+                        </button>
+                    </div>
+                    <div v-if="taxStatement?.period" class="filtered-summary">
+                        <span>Période couverte</span>
+                        <strong>{{ taxStatement.period }}</strong>
+                    </div>
                     <div class="tax-grid" v-if="taxStatement">
                         <div><span>Recettes</span><strong>{{ formatMoney(taxStatement.sales_total) }}</strong></div>
+                        <div><span>Coût d'achat vendu</span><strong>{{ formatMoney(taxStatement.cost_of_goods_sold) }}</strong></div>
+                        <div><span>Marge brute estimée</span><strong>{{ formatMoney(taxStatement.gross_margin) }}</strong></div>
                         <div><span>Dépenses</span><strong>{{ formatMoney(taxStatement.expenses_total) }}</strong></div>
-                        <div><span>Paies</span><strong>{{ formatMoney(taxStatement.payrolls_total) }}</strong></div>
+                        <div><span>Salaires bruts</span><strong>{{ formatMoney(taxStatement.payrolls_gross_total) }}</strong></div>
+                        <div><span>Valeur du stock</span><strong>{{ formatMoney(taxStatement.stock_value) }}</strong></div>
+                        <div><span>Actif estimé</span><strong>{{ formatMoney(taxStatement.balance_assets_total) }}</strong></div>
                         <div><span>Résultat estimé</span><strong>{{ formatMoney(taxStatement.net_result) }}</strong></div>
                     </div>
-                    <a class="btn btn-primary" :href="`/businesses/${businessId}/taxes/statement`" target="_blank"><i class="fa-solid fa-print"></i>Imprimer le bilan</a>
+                    <div class="tax-documents">
+                        <h3>Documents comptables à préparer</h3>
+                        <p class="tax-disclaimer">
+                            <i class="fa-solid fa-triangle-exclamation"></i>{{ taxDisclaimer }}
+                        </p>
+                        <ul>
+                            <li v-for="document in taxDocuments" :key="document.title || document">
+                                <i class="fa-solid fa-file-lines"></i>
+                                <span>
+                                    <strong>{{ document.title || document }}</strong>
+                                    <small v-if="document.description">{{ document.description }}</small>
+                                </span>
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="tax-actions">
+                        <a class="btn btn-primary" :href="taxStatementUrl" target="_blank"><i class="fa-solid fa-print"></i>Imprimer le bilan</a>
+                        <button class="btn btn-light" type="button" @click="printAllTaxDocuments">
+                            <i class="fa-solid fa-print"></i>Tout imprimer
+                        </button>
+                    </div>
                 </article>
 
                 <article class="card">
@@ -2956,7 +4148,25 @@
                     <div class="tax-faq">
                         <details v-for="item in taxFaq" :key="item.question">
                             <summary>{{ item.question }}</summary>
-                            <p>{{ item.answer }}</p>
+                            <div class="tax-faq-answer">
+                                <p v-for="paragraph in item.paragraphs || [item.answer]" :key="paragraph">{{ paragraph }}</p>
+                                <ul v-if="item.points?.length">
+                                    <li v-for="point in item.points" :key="point"><i class="fa-solid fa-check"></i>{{ point }}</li>
+                                </ul>
+                                <div v-if="item.example" class="tax-faq-example">
+                                    <strong>Exemple</strong>
+                                    <p>{{ item.example }}</p>
+                                </div>
+                            </div>
+                            <div v-if="item.links?.length" class="tax-links">
+                                <a v-for="link in item.links" :key="link.url" :href="link.url" target="_blank" rel="noopener">
+                                    <i class="fa-solid fa-arrow-up-right-from-square"></i>
+                                    <span>
+                                        <strong>{{ link.label }}</strong>
+                                        <small>{{ link.url }}</small>
+                                    </span>
+                                </a>
+                            </div>
                         </details>
                     </div>
                 </article>
@@ -2966,7 +4176,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 
 const props = defineProps({
     businessId: {
@@ -2981,12 +4191,19 @@ const props = defineProps({
         type: String,
         default: 'tableau-de-bord',
     },
+    initialUserRole: {
+        type: String,
+        default: '',
+    },
 });
 
 const business = ref(null);
-const currentUser = ref({});
+const currentUser = ref(props.initialUserRole ? { role: props.initialUserRole } : {});
 const subscription = ref(null);
 const products = ref([]);
+const services = ref([]);
+const categories = ref([]);
+const stockMovements = ref([]);
 const sales = ref([]);
 const customers = ref([]);
 const receivables = ref([]);
@@ -2998,6 +4215,8 @@ const employeeTypes = ref([]);
 const payrolls = ref([]);
 const taxFaq = ref([]);
 const taxStatement = ref(null);
+const taxDocuments = ref([]);
+const taxDisclaimer = ref('');
 const notifications = ref([]);
 const subscriptionPlans = ref({});
 const summary = reactive({
@@ -3015,17 +4234,30 @@ const today = new Date().toISOString().slice(0, 10);
 const reportPeriod = ref('monthly');
 const reportStartDate = ref(today);
 const reportEndDate = ref(today);
+const reportExactDate = ref(today);
+const taxPeriod = ref('monthly');
+const taxStartDate = ref(today);
+const taxEndDate = ref(today);
 const showReportFormatModal = ref(false);
 const selectedReportPeriod = ref('monthly');
+const reportModalPeriod = ref('monthly');
+const reportModalStartDate = ref(today);
+const reportModalEndDate = ref(today);
+const reportModalExactDate = ref(today);
+const saleToCancel = ref(null);
 const selectedDownload = reactive({
+    kind: 'static',
     title: '',
     pdfUrl: '',
     excelUrl: '',
 });
 const saving = ref(false);
 const savingSale = ref(false);
+const savingServiceSale = ref(false);
+const savingSaleCancel = ref(false);
 const message = ref('');
 const saleMessage = ref('');
+const saleCancelMessage = ref('');
 const receivableMessage = ref('');
 const supplierDebtMessage = ref('');
 const supplierMessage = ref('');
@@ -3036,11 +4268,38 @@ const expenseMessage = ref('');
 const savingExpense = ref(false);
 const showProductModal = ref(false);
 const showProductPrintModal = ref(false);
+const productPrintColumns = [
+    { key: 'name', label: 'Produit' },
+    { key: 'category', label: 'Catégorie' },
+    { key: 'notes', label: 'Note' },
+    { key: 'quantity', label: 'Quantité' },
+    { key: 'alert_threshold', label: 'Seuil' },
+    { key: 'purchase_price', label: 'Prix achat' },
+    { key: 'sale_price', label: 'Prix vente' },
+    { key: 'stock_purchase_value', label: "Valeur d'achat stock" },
+    { key: 'stock_sale_value', label: 'Valeur vente stock' },
+    { key: 'sold_quantity', label: 'Quantité vendue' },
+    { key: 'status', label: 'État' },
+];
+const selectedProductPrintColumnKeys = ref(['name', 'category', 'quantity', 'alert_threshold', 'sale_price', 'status']);
+const showCategoryModal = ref(false);
+const showStockMovementModal = ref(false);
+const showStockMovementDateModal = ref(false);
+const showProductDetailsModal = ref(false);
+const showStockHistoryModal = ref(false);
 const showExpenseModal = ref(false);
+const showServiceModal = ref(false);
+const showServiceSaleConfirmModal = ref(false);
 const showExpenseDateModal = ref(false);
 const showExpensePrintModal = ref(false);
 const showSalesDateModal = ref(false);
 const showSalesPrintModal = ref(false);
+const showSaleCancelModal = ref(false);
+const showSaleConfirmModal = ref(false);
+const showSaleCompletedModal = ref(false);
+const showSaleValidationModal = ref(false);
+const showSaleWhatsappModal = ref(false);
+const saleValidationErrors = ref([]);
 const showExpenseFilterCategoryMenu = ref(false);
 const showExpenseFormCategoryMenu = ref(false);
 const expenseDateMode = ref('exact');
@@ -3066,6 +4325,8 @@ const showSupplierDetailsModal = ref(false);
 const showCustomerCreateModal = ref(false);
 const showCustomerPrintModal = ref(false);
 const showCustomerDetailsModal = ref(false);
+const showCustomerPhoneEditModal = ref(false);
+const customerCreateSource = ref('customers');
 const showEmployeeModal = ref(false);
 const showEmployeeDetailsModal = ref(false);
 const showAdvanceModal = ref(false);
@@ -3083,12 +4344,23 @@ const selectedReceivableDetails = ref(null);
 const editingReceivable = ref(null);
 const editingReceivablePayment = ref(null);
 const selectedCustomerDetails = ref(null);
+const editingCustomer = ref(null);
 const selectedSupplierDebt = ref(null);
 const selectedSupplierDebtDetails = ref(null);
 const editingSupplierDebt = ref(null);
 const editingSupplierDebtPayment = ref(null);
 const selectedSupplierDetails = ref(null);
+const stockMovementProduct = ref(null);
+const selectedProductDetails = ref(null);
+const stockHistoryProduct = ref(null);
+const stockHistoryMovements = ref([]);
+const loadingStockHistory = ref(false);
+const editingProduct = ref(null);
+const editingService = ref(null);
+const editingCategory = ref(null);
+const categoryModalSource = ref('categories');
 const editingSupplier = ref(null);
+const editingExpense = ref(null);
 const editingEmployee = ref(null);
 const editingAdvance = ref(null);
 const selectedAdvanceEmployee = ref(null);
@@ -3097,13 +4369,17 @@ const selectedEmployeeDetails = ref(null);
 const customerView = ref('receivables');
 const supplierView = ref('debts');
 const salesView = ref('invoices');
+const stockView = ref('products');
 const employeeView = ref('staff');
 const payrollSubView = ref('payrolls');
+const defaultProductCategoryName = 'Catégorie par défaut';
 const savingReceivable = ref(false);
 const savingCustomer = ref(false);
 const employeeMessage = ref('');
 const payrollMessage = ref('');
 const savingEmployee = ref(false);
+const savingCategory = ref(false);
+const savingStockMovement = ref(false);
 const savingAdvance = ref(false);
 const savingEmployeeBan = ref(false);
 const savingSubscription = ref(false);
@@ -3114,6 +4390,14 @@ const dashboardLoaded = ref(false);
 const toasts = ref([]);
 const settingsLogoFile = ref(null);
 const settingsLogoPreview = ref('');
+const settingsRemoveLogo = ref(false);
+const showLogoCropModal = ref(false);
+const logoCropImageUrl = ref('');
+const logoCropSourceFile = ref(null);
+const logoCrop = reactive({ zoom: 1, x: 0, y: 0 });
+const showPageHelpModal = ref(false);
+const completedSale = ref(null);
+const completedSaleWhatsappPhone = ref('');
 let toastId = 0;
 
 const routeSectionMap = {
@@ -3126,22 +4410,29 @@ const routeSectionMap = {
     parametres: 'settings',
     personnel: 'employees',
     rapports: 'reports',
+    services: 'services',
     stocks: 'stocks',
     ventes: 'sales',
+    'vente-proforma': 'admin-sale-proforma',
     caisse: 'seller-cashier',
-    proforma: 'seller-proforma',
+    proforma: 'seller-cashier',
     'mes-ventes': 'seller-sales',
     produits: 'seller-products',
     profil: 'seller-profile',
 };
 const activeSection = ref(routeSectionMap[props.initialSection] || 'dashboard');
-const sellerSections = ['seller-cashier', 'seller-proforma', 'seller-sales', 'seller-products', 'seller-profile'];
+const sellerSections = ['seller-cashier', 'services', 'seller-sales', 'seller-products', 'seller-profile'];
 const sidebarOpen = ref(false);
+const isCompactNav = ref(false);
+let compactNavMediaQuery = null;
+let compactNavMediaHandler = null;
 const pageMeta = {
     dashboard: ['Tableau de bord', 'Vos statistiques essentielles.'],
     notifications: ['Notifications', 'Alertes, validations et messages importants.'],
-    stocks: ['Stocks', "Produits, inventaire et seuils d'alerte."],
-    sales: ['Factures & ventes', 'Suivi des ventes, factures et factures pro forma'],
+    stocks: ['Stocks & Historique', "Produits, catégories et mouvements d'inventaire."],
+    'admin-sale-proforma': ['Vente & Proforma', 'Enregistrez une vente ou préparez une facture pro forma.'],
+    services: ['Services', 'Prestations vendables avec ou sans produits.'],
+    sales: ['Factures', 'Suivi des factures et factures pro forma'],
     customers: ['Clients & créances', 'Crédits clients, échéances et remboursements.'],
     suppliers: ['Fournisseurs & dettes', 'Dettes fournisseurs, échéances et paiements.'],
     expenses: ['Charges', 'Dépenses classées par catégories OHADA.'],
@@ -3149,24 +4440,145 @@ const pageMeta = {
     reports: ['Rapports', 'Exports et rapports PDF ou Excel.'],
     taxes: ['Impôts & comptabilité', 'Bilan estimé et repères comptables.'],
     settings: ['Paramètres boutique', 'Informations affichées sur vos documents.'],
-    'seller-cashier': ['Caisse', 'Nouvelle vente et facture rapide.'],
-    'seller-proforma': ['Proforma', 'Préparation des devis avant validation.'],
-    'seller-sales': ['Mes ventes', 'Historique de vos ventes et factures.'],
+    'seller-cashier': ['Vente & Proforma', 'Ventes et proformas sur une seule page.'],
+    'seller-sales': ['Factures & Proformas', 'Historique de vos factures et proformas.'],
     'seller-products': ['Produits', 'Catalogue et stocks disponibles.'],
     'seller-profile': ['Profil', 'Paramètres de votre compte vendeur.'],
 };
 const pageTitle = computed(() => pageMeta[activeSection.value]?.[0] || 'Tableau de bord');
 const pageSubtitle = computed(() => pageMeta[activeSection.value]?.[1] || 'Vos statistiques essentielles.');
+const pageHelpItems = {
+    dashboard: {
+        title: 'Comprendre le tableau de bord',
+        intro: 'Cette page donne une vue rapide de la santé de votre boutique sans ouvrir chaque module.',
+        infos: ['Ventes du jour et total des ventes.', 'Nombre de produits, valeur du stock et alertes de stock bas.', 'Charges du mois, vendeurs actifs et état de l’abonnement.'],
+        actions: ['Repérer rapidement les priorités de la journée.', 'Identifier un stock à réapprovisionner.', 'Contrôler si les ventes couvrent les charges récentes.'],
+        example: 'Si le stock bas affiche 8 produits, ouvrez la page Stocks pour voir les articles concernés avant qu’un vendeur ne soit bloqué pendant une vente.',
+    },
+    notifications: {
+        title: 'Comprendre les notifications',
+        intro: 'Cette page regroupe les alertes et messages importants liés à votre activité.',
+        infos: ['Notifications non lues et déjà traitées.', 'Alertes de stock, créances, dettes, abonnement ou activité importante.', 'Filtres par statut, type et date de réception.'],
+        actions: ['Lire une notification et la marquer comme traitée.', 'Filtrer les alertes urgentes.', 'Tout marquer comme lu après contrôle.'],
+        example: 'Si une alerte signale une créance échue, ouvrez Clients & créances pour relancer le client ou enregistrer un remboursement.',
+    },
+    stocks: {
+        title: 'Comprendre les stocks',
+        intro: 'Cette page sert à suivre les produits, les quantités et les mouvements d’inventaire.',
+        infos: ['Liste des produits et catégories.', 'Quantités disponibles, seuils d’alerte et valeur du stock.', 'Entrées, sorties et ajustements de stock.'],
+        actions: ['Ajouter ou modifier un produit.', 'Enregistrer un réapprovisionnement ou une correction.', 'Filtrer les produits à faible stock.'],
+        example: 'Après l’achat de 20 cartons, enregistrez une entrée de stock pour que la caisse vende avec la bonne quantité disponible.',
+    },
+    sales: {
+        title: 'Comprendre les factures et ventes',
+        intro: 'Cette page permet de suivre les factures et consulter l’historique des transactions.',
+        infos: ['Factures validées et proformas.', 'Clients, vendeurs, moyens de paiement, montants et dates.', 'Filtres par type de document, paiement et période.'],
+        actions: ['Imprimer ou consulter une facture.', 'Rechercher une vente par client, vendeur ou numéro.', 'Contrôler les ventes enregistrées par les vendeurs.'],
+        example: 'Un client demande son reçu de la semaine dernière : filtrez par date ou recherchez son nom, puis ouvrez la facture pour l’imprimer.',
+    },
+    'admin-sale-proforma': {
+        title: 'Comprendre Vente & Proforma',
+        intro: 'Cette page reprend la caisse vendeur pour permettre à l’administrateur de vendre ou de créer une facture pro forma.',
+        infos: ['Section Vente pour valider une facture et déduire le stock.', 'Section Proforma pour préparer un devis sans mouvement de stock.', 'Client, produits, prix, quantités et total avant validation.'],
+        actions: ['Sélectionner Vente ou Proforma.', 'Ajouter les produits au panier.', 'Valider puis imprimer le document généré.'],
+        example: 'Si un client demande d’abord un devis, choisissez Proforma. S’il achète directement, choisissez Vente pour créer la facture et mettre le stock à jour.',
+    },
+    services: {
+        title: 'Comprendre les services',
+        intro: 'Cette page prépare la vente de prestations en plus des produits physiques.',
+        infos: ['Catalogue des services avec prix, durée et catégorie.', 'État actif ou suspendu pour contrôler ce qui est vendable.', 'Vue vendeur limitée au catalogue disponible.'],
+        actions: ['Créer ou modifier un service côté administrateur.', 'Filtrer les prestations par catégorie ou statut.', 'Préparer ensuite l’intégration à la vente.'],
+        example: 'Une boutique peut vendre une livraison, une installation ou une maintenance en plus du produit vendu.',
+    },
+    customers: {
+        title: 'Comprendre clients et créances',
+        intro: 'Cette page vous aide à suivre les clients qui achètent à crédit et les remboursements.',
+        infos: ['Créances en cours, échues ou payées.', 'Clients, montants dus, soldes restants et échéances.', 'Historique client avec factures et paiements.'],
+        actions: ['Créer une nouvelle créance.', 'Ajouter un paiement partiel ou total.', 'Consulter la situation détaillée d’un client.'],
+        example: 'Si un client devait 50 000 FCFA et paie 20 000 FCFA, ajoutez un paiement pour voir automatiquement le solde restant de 30 000 FCFA.',
+    },
+    suppliers: {
+        title: 'Comprendre fournisseurs et dettes',
+        intro: 'Cette page sert à suivre ce que la boutique doit aux fournisseurs et les règlements effectués.',
+        infos: ['Dettes fournisseurs, échéances et statuts.', 'Coordonnées fournisseurs et notes utiles.', 'Historique des paiements effectués.'],
+        actions: ['Ajouter une dette fournisseur.', 'Enregistrer un paiement.', 'Consulter ou modifier la fiche d’un fournisseur.'],
+        example: 'Après une livraison à crédit de 120 000 FCFA, créez une dette fournisseur avec une échéance pour ne pas oublier le paiement.',
+    },
+    expenses: {
+        title: 'Comprendre les charges',
+        intro: 'Cette page centralise les dépenses de la boutique pour mieux calculer le résultat.',
+        infos: ['Charges par catégorie, date et montant.', 'Notes et justificatifs internes.', 'Total des dépenses filtrées.'],
+        actions: ['Enregistrer une nouvelle charge.', 'Filtrer par catégorie ou période.', 'Exporter ou imprimer les charges pour le comptable.'],
+        example: 'Si vous payez l’électricité 18 000 FCFA, ajoutez une charge dans la catégorie énergie avec la date du reçu.',
+    },
+    employees: {
+        title: 'Comprendre personnel et paie',
+        intro: 'Cette page regroupe les employés, les salaires, les avances et les paies.',
+        infos: ['Liste du personnel et types de compte.', 'Vendeurs autorisés à se connecter pour effectuer les ventes.', 'Salaires, avances, paies et autorisation de modification des prix.'],
+        actions: ['Créer un employé ou un vendeur.', 'Autoriser ou refuser la modification des prix pendant la vente.', 'Enregistrer une avance puis calculer la paie.'],
+        example: 'Pour donner la main à un vendeur, créez un compte vendeur. Activez la modification des prix seulement s’il doit pouvoir ajuster les prix à la caisse.',
+    },
+    reports: {
+        title: 'Comprendre les rapports',
+        intro: 'Cette page permet de produire des synthèses exploitables pour la gestion et la comptabilité.',
+        infos: ['Rapports journaliers, hebdomadaires, mensuels ou personnalisés.', 'Ventes, charges, stock, créances, dettes et paies.', 'Exports PDF ou Excel selon le besoin.'],
+        actions: ['Choisir une période de rapport.', 'Ouvrir un rapport détaillé.', 'Exporter les données pour analyse ou archivage.'],
+        example: 'Pour préparer une réunion mensuelle, choisissez la période du mois et exportez le rapport complet avant d’analyser les ventes et charges.',
+    },
+    taxes: {
+        title: 'Comprendre impôts et comptabilité',
+        intro: 'Cette page prépare un dossier comptable estimé à transmettre au comptable ou à vérifier avant déclaration.',
+        infos: ['Bilan mensuel estimé.', 'Documents comptables à préparer.', 'FAQ fiscale avec liens utiles vers les services officiels.'],
+        actions: ['Imprimer le bilan.', 'Tout imprimer pour constituer le dossier.', 'Consulter les repères sur e-MECeF, e-services, IFU et e-Bilan.'],
+        example: 'En fin de mois, imprimez le bilan et rassemblez les ventes, charges, créances et dettes avant d’envoyer le dossier au comptable.',
+    },
+    settings: {
+        title: 'Comprendre les paramètres boutique',
+        intro: 'Cette page sert à configurer les informations qui apparaissent sur les documents de la boutique.',
+        infos: ['Téléphone et WhatsApp utilisateur séparés des contacts boutique.', 'Nom, téléphone boutique, WhatsApp boutique, adresse, IFU et slogan.', 'Informations boutique utilisées sur factures et rapports.'],
+        actions: ['Mettre à jour les coordonnées.', 'Changer le logo ou la couleur.', 'Vérifier les informations fiscales avant impression.'],
+        example: 'Si vous changez de numéro WhatsApp, mettez-le à jour ici pour que les factures et contacts clients restent corrects.',
+    },
+    'seller-cashier': {
+        title: 'Comprendre Vente & Proforma',
+        intro: 'Cette page permet au vendeur d’enregistrer une vente ou de préparer une facture pro forma.',
+        infos: ['Section Vente pour valider une facture et déduire le stock.', 'Section Proforma pour préparer un devis sans mouvement de stock.', 'Panier, quantités, paiement et client.'],
+        actions: ['Choisir Vente ou Proforma.', 'Ajouter des produits au panier.', 'Valider et imprimer le document.'],
+        example: 'Un client achète directement : choisissez Vente. Un client demande un devis : choisissez Proforma.',
+    },
+    'seller-sales': {
+        title: 'Comprendre factures et proformas',
+        intro: 'Cette page montre uniquement les factures et proformas créées par le vendeur connecté.',
+        infos: ['Section Factures pour les ventes validées.', 'Section Proformas pour les devis émis.', 'Montants, dates, clients, paiements et recherche par numéro.'],
+        actions: ['Basculer entre Factures et Proformas.', 'Retrouver un document.', 'Réimprimer une facture ou une proforma.'],
+        example: 'En fin de journée, ouvrez Factures pour vérifier vos ventes, puis Proformas pour retrouver les devis envoyés aux clients.',
+    },
+    'seller-products': {
+        title: 'Comprendre les produits vendeur',
+        intro: 'Cette page permet au vendeur de consulter le catalogue et les disponibilités.',
+        infos: ['Produits vendables.', 'Prix et quantités disponibles.', 'Alertes visuelles sur les stocks faibles.'],
+        actions: ['Rechercher un produit.', 'Vérifier le prix avant de vendre.', 'Identifier un produit indisponible.'],
+        example: 'Avant de promettre un article au client, recherchez-le ici pour confirmer qu’il reste en stock.',
+    },
+    'seller-profile': {
+        title: 'Comprendre le profil vendeur',
+        intro: 'Cette page affiche les informations du compte vendeur connecté.',
+        infos: ['Nom, rôle et informations de connexion.', 'Boutique liée au compte.', 'Coordonnées utiles.'],
+        actions: ['Vérifier les informations du compte.', 'Contrôler la boutique associée.', 'Demander une correction à l’administrateur si nécessaire.'],
+        example: 'Si votre nom est mal écrit sur les documents internes, signalez-le à l’administrateur pour correction.',
+    },
+};
+const pageHelpContent = computed(() => pageHelpItems[activeSection.value] || pageHelpItems.dashboard);
 const currentUserCanSell = computed(() => currentUser.value?.role === 'Vendeur');
-const sellerCheckoutActive = computed(() => currentUserCanSell.value && ['seller-cashier', 'seller-proforma', 'sales'].includes(activeSection.value));
+const sellerCheckoutActive = computed(() => (currentUserCanSell.value && ['seller-cashier', 'sales'].includes(activeSection.value)) || activeSection.value === 'admin-sale-proforma');
 const salesHistoryActive = computed(() => activeSection.value === 'sales' || activeSection.value === 'seller-sales');
-const sellerCheckoutSubmitLabel = computed(() => activeSection.value === 'seller-proforma' ? 'Enregistrer la proforma' : 'Valider la facture');
+const sellerCheckoutSubmitLabel = computed(() => saleDraftIsProforma.value ? 'Enregistrer la proforma' : 'Valider la facture');
 const sellerSalesTitle = computed(() => {
     if (currentUserCanSell.value) {
-        return 'Mes ventes';
+        return salesView.value === 'proformas' ? 'Mes proformas' : 'Mes factures';
     }
 
-    return salesView.value === 'proformas' ? 'Factures Pro forma' : 'Factures & ventes';
+    return salesView.value === 'proformas' ? 'Factures Pro forma' : 'Factures';
 });
 const salesEmptyColspan = computed(() => {
     if (currentUserCanSell.value) {
@@ -3181,8 +4593,10 @@ const reportPeriods = [
     { value: 'monthly', label: 'Mensuel' },
     { value: 'quarterly', label: 'Trimestriel' },
     { value: 'yearly', label: 'Annuel' },
-    { value: 'custom', label: 'Période personnalisée' },
+    { value: 'exact', label: 'Date précise' },
+    { value: 'custom', label: 'Entre deux dates' },
 ];
+const taxPeriods = reportPeriods.filter((period) => ['monthly', 'quarterly', 'yearly', 'custom'].includes(period.value));
 const quickReportPeriods = [
     { value: 'daily', label: 'Jour', icon: 'fa-solid fa-calendar-day' },
     { value: 'weekly', label: 'Semaine', icon: 'fa-solid fa-calendar-week' },
@@ -3192,6 +4606,7 @@ const quickReportPeriods = [
 ];
 const reportExports = [
     { type: 'products', label: 'Produits', icon: 'fa-solid fa-boxes-stacked' },
+    { type: 'profitability', label: 'Rentabilité', icon: 'fa-solid fa-scale-balanced' },
     { type: 'sales', label: 'Ventes', icon: 'fa-solid fa-receipt' },
     { type: 'expenses', label: 'Charges', icon: 'fa-solid fa-money-bill-wave' },
     { type: 'customers', label: 'Clients', icon: 'fa-solid fa-users' },
@@ -3200,9 +4615,25 @@ const reportExports = [
     { type: 'employees', label: 'Employés', icon: 'fa-solid fa-user-tie' },
     { type: 'payrolls', label: 'Paies', icon: 'fa-solid fa-file-invoice-dollar' },
 ];
-const canOpenSelectedReport = computed(() => reportPeriod.value !== 'custom' || (reportStartDate.value && reportEndDate.value && reportStartDate.value <= reportEndDate.value));
+const canOpenSelectedReport = computed(() => isReportPeriodValid(reportPeriod.value, reportExactDate.value, reportStartDate.value, reportEndDate.value));
+const canApplyTaxPeriod = computed(() => taxPeriod.value !== 'custom' || (taxStartDate.value && taxEndDate.value && taxStartDate.value <= taxEndDate.value));
 const selectedReportUrl = computed(() => buildReportUrl(reportPeriod.value));
-const selectedDownloadTitle = computed(() => selectedDownload.title || 'Rapport');
+const taxStatementUrl = computed(() => buildTaxStatementUrl());
+const taxStatementExportUrl = computed(() => buildTaxStatementExportUrl());
+const selectedDownloadTitle = computed(() => {
+    if (selectedDownload.kind === 'report') {
+        return reportPeriodTitle(reportModalPeriod.value);
+    }
+
+    return selectedDownload.title || 'Rapport';
+});
+const canExportSelectedDownload = computed(() => {
+    if (selectedDownload.kind !== 'report') {
+        return true;
+    }
+
+    return isReportPeriodValid(reportModalPeriod.value, reportModalExactDate.value, reportModalStartDate.value, reportModalEndDate.value);
+});
 const reportSummaryCards = computed(() => [
     { label: "Ventes aujourd'hui", value: formatMoney(summary.today_sales_total), icon: 'fa-solid fa-cash-register' },
     { label: 'Ventes totales', value: formatMoney(summary.sales_total), icon: 'fa-solid fa-chart-line' },
@@ -3216,49 +4647,88 @@ function sectionUrl(section) {
     return `/dashboard/${props.businessId}/${section}`;
 }
 
-function buildReportUrl(period) {
-    const base = `/businesses/${props.businessId}/reports/${period}`;
-    if (period !== 'custom') {
+function isReportPeriodValid(period, exactDate, startDate, endDate) {
+    if (period === 'exact') {
+        return Boolean(exactDate);
+    }
+
+    if (period === 'custom') {
+        return Boolean(startDate && endDate && startDate <= endDate);
+    }
+
+    return true;
+}
+
+function reportPeriodTitle(period) {
+    const report = reportPeriods.find((item) => item.value === period);
+    return report?.label || 'Rapport';
+}
+
+function reportUrl(period, exportMode = false, exactDate = reportExactDate.value, startDate = reportStartDate.value, endDate = reportEndDate.value) {
+    const routePeriod = period === 'exact' ? 'custom' : period;
+    const base = `/businesses/${props.businessId}/reports/${routePeriod}${exportMode ? '/export' : ''}`;
+
+    if (!['custom', 'exact'].includes(period)) {
         return base;
     }
 
     const params = new URLSearchParams({
-        start: reportStartDate.value || today,
-        end: reportEndDate.value || today,
+        start: period === 'exact' ? (exactDate || today) : (startDate || today),
+        end: period === 'exact' ? (exactDate || today) : (endDate || today),
     });
 
     return `${base}?${params.toString()}`;
 }
 
+function buildReportUrl(period) {
+    return reportUrl(period);
+}
+
 function buildReportExportUrl(period) {
-    const base = `/businesses/${props.businessId}/reports/${period}/export`;
-    if (period !== 'custom') {
-        return base;
+    return reportUrl(period, true);
+}
+
+function taxQueryParams() {
+    const params = new URLSearchParams({ period: taxPeriod.value });
+
+    if (taxPeriod.value === 'custom') {
+        params.set('start', taxStartDate.value || today);
+        params.set('end', taxEndDate.value || today);
     }
 
-    const params = new URLSearchParams({
-        start: reportStartDate.value || today,
-        end: reportEndDate.value || today,
-    });
+    return params.toString();
+}
 
-    return `${base}?${params.toString()}`;
+function buildTaxStatementUrl() {
+    return `/businesses/${props.businessId}/taxes/statement?${taxQueryParams()}`;
+}
+
+function buildTaxStatementExportUrl() {
+    return `/businesses/${props.businessId}/taxes/statement/export?${taxQueryParams()}`;
+}
+
+function buildTaxApiUrl() {
+    return `/api/businesses/${props.businessId}/taxes?${taxQueryParams()}`;
 }
 
 function openReportFormatModal(period) {
     selectedReportPeriod.value = period;
-    const report = reportPeriods.find((item) => item.value === period);
-    openDownloadFormatModal(
-        report?.label || 'Rapport',
-        buildReportUrl(period),
-        buildReportExportUrl(period)
-    );
+    reportModalPeriod.value = period;
+    reportModalExactDate.value = reportExactDate.value || today;
+    reportModalStartDate.value = reportStartDate.value || today;
+    reportModalEndDate.value = reportEndDate.value || today;
+    selectedDownload.kind = 'report';
+    selectedDownload.title = reportPeriodTitle(period);
+    selectedDownload.pdfUrl = '';
+    selectedDownload.excelUrl = '';
+    showReportFormatModal.value = true;
 }
 
 function openTaxFormatModal() {
     openDownloadFormatModal(
         'Bilan comptable',
-        `/businesses/${props.businessId}/taxes/statement`,
-        `/businesses/${props.businessId}/taxes/statement/export`
+        taxStatementUrl.value,
+        taxStatementExportUrl.value
     );
 }
 
@@ -3271,6 +4741,7 @@ function openExportFormatModal(item) {
 }
 
 function openDownloadFormatModal(title, pdfUrl, excelUrl) {
+    selectedDownload.kind = 'static';
     selectedDownload.title = title;
     selectedDownload.pdfUrl = pdfUrl;
     selectedDownload.excelUrl = excelUrl;
@@ -3278,7 +4749,15 @@ function openDownloadFormatModal(title, pdfUrl, excelUrl) {
 }
 
 function exportSelectedDownload(format) {
-    const url = format === 'excel' ? selectedDownload.excelUrl : selectedDownload.pdfUrl;
+    const url = selectedDownload.kind === 'report'
+        ? reportUrl(
+            reportModalPeriod.value,
+            format === 'excel',
+            reportModalExactDate.value,
+            reportModalStartDate.value,
+            reportModalEndDate.value
+        )
+        : (format === 'excel' ? selectedDownload.excelUrl : selectedDownload.pdfUrl);
 
     showReportFormatModal.value = false;
     window.open(url, '_blank');
@@ -3307,11 +4786,11 @@ function paginationLabel(count) {
 const form = reactive({
     name: '',
     category_name: '',
-    unit: 'unité',
     purchase_price: '',
     sale_price: '',
     stock_quantity: '',
     alert_threshold: '',
+    notes: '',
 });
 const productFilters = reactive({
     search: '',
@@ -3319,23 +4798,93 @@ const productFilters = reactive({
     status: '',
 });
 const productSort = ref('name_asc');
-const productPriceForms = reactive({});
-
-const saleLine = reactive({
-    product_id: '',
+const serviceFilters = reactive({
+    search: '',
+    status: '',
+});
+const servicePageView = ref('sale');
+const serviceSort = ref('name_asc');
+const serviceForm = reactive({
+    name: '',
+    price: 0,
+    duration: '',
+    status: 'active',
+    details: '',
+});
+const serviceSaleForm = reactive({
+    customer_id: '',
+    customer_name: '',
+    customer_phone: '',
+    payment_method: 'cash',
+    credit_due_date: '',
+});
+const serviceSaleLineKey = ref(1);
+const createServiceSaleLine = () => ({
+    key: serviceSaleLineKey.value++,
+    service_id: '',
     quantity: 1,
-    discount: '',
+    unit_price: 0,
+});
+const serviceSaleLines = ref([createServiceSaleLine()]);
+const stockCategoryFilters = reactive({
+    search: '',
+    status: '',
+});
+const stockCategorySort = ref('name_asc');
+const stockPageView = ref('stocks');
+const stockMovementFilters = reactive({
+    search: '',
+    type: '',
+    exactDate: '',
+    startDate: '',
+    endDate: '',
+});
+const stockMovementDateDraft = reactive({
+    exactDate: '',
+    startDate: '',
+    endDate: '',
+});
+const stockMovementDateMode = ref('exact');
+const stockMovementSort = ref('date_desc');
+const productPriceForms = reactive({});
+const stockMovementMode = ref('add');
+const stockMovementForm = reactive({
+    quantity: '',
+    notes: '',
+});
+const categoryForm = reactive({
+    name: '',
 });
 
+const saleLineKey = ref(1);
+const createSaleLine = () => ({
+    key: saleLineKey.value++,
+    product_id: '',
+    product_search: '',
+    unit_price: '',
+    quantity: 1,
+    discount: '',
+    show_suggestions: false,
+    stock_warning_shown: false,
+});
+const saleLines = ref([createSaleLine()]);
+const customerSearch = ref('');
+const showCustomerSuggestions = ref(false);
+const serviceCustomerSearch = ref('');
+const showServiceCustomerSuggestions = ref(false);
+
 const saleForm = reactive({
+    customer_id: '',
     customer_name: '',
     customer_phone: '',
     payment_method: 'cash',
     type: 'invoice',
     credit_due_date: '',
 });
-
-const cart = ref([]);
+const saleDraftIsProforma = computed(() => saleForm.type === 'proforma');
+const saleCancelForm = reactive({
+    reason: '',
+});
 
 const salesFilters = reactive({
     search: '',
@@ -3354,6 +4903,10 @@ const salesSort = ref('date_desc');
 
 const customerForm = reactive({
     name: '',
+    phone: '',
+});
+
+const customerPhoneForm = reactive({
     phone: '',
 });
 
@@ -3554,16 +5107,26 @@ const subscriptionForm = reactive({
 
 const settingsForm = reactive({
     name: '',
+    user_phone: '',
+    user_whatsapp_phone: '',
     phone: '',
     whatsapp_phone: '',
+    whatsapp_report_phone: '',
     address: '',
     ifu: '',
     slogan: '',
+    description: '',
     primary_color: '#2f7d69',
     secondary_color: '#f5b84b',
+    whatsapp_reports_enabled: false,
+    whatsapp_report_time: '08:00',
+    whatsapp_report_type: 'global',
     show_logo_on_documents: true,
     show_ifu_on_documents: true,
     show_slogan_on_documents: true,
+    show_description_on_documents: true,
+    show_phone_on_documents: true,
+    show_whatsapp_on_documents: true,
     show_address_on_documents: true,
 });
 
@@ -3581,15 +5144,41 @@ const notificationFilters = reactive({
 const notificationSort = ref('newest');
 
 const productCategories = computed(() => {
-    return [...new Set(products.value.map((product) => product.category?.name || 'Non classé'))]
+    return [...new Set([
+        ...categories.value.map((category) => category.name),
+        ...products.value.map((product) => product.category?.name || 'Non classé'),
+    ])]
         .sort((a, b) => a.localeCompare(b, 'fr'));
 });
+const productSoldQuantities = computed(() => {
+    const rows = {};
+    sales.value
+        .filter((sale) => sale.status === 'completed')
+        .forEach((sale) => {
+            (sale.items || []).forEach((item) => {
+                const key = item.product_id || item.product_name;
+                rows[key] = (rows[key] || 0) + Number(item.quantity || 0);
+            });
+        });
+
+    return rows;
+});
+function productSoldQuantity(product) {
+    return Number(productSoldQuantities.value[product.id] || productSoldQuantities.value[product.name] || 0);
+}
+const editingProductPurchasePriceLocked = computed(() => editingProduct.value && productSoldQuantity(editingProduct.value) > 0);
+function productPurchaseStockValue(product) {
+    return Number(product?.stock_quantity || 0) * Number(product?.purchase_price || 0);
+}
+function productSaleStockValue(product) {
+    return Number(product?.stock_quantity || 0) * Number(product?.sale_price || 0);
+}
 const filteredProducts = computed(() => {
     const term = productFilters.search.trim().toLowerCase();
     const rows = products.value.filter((product) => {
         const category = product.category?.name || 'Non classé';
         const matchesSearch = !term
-            || [product.name, product.unit, category].some((value) => String(value || '').toLowerCase().includes(term));
+            || [product.name, product.notes, category].some((value) => String(value || '').toLowerCase().includes(term));
         const matchesCategory = !productFilters.category || category === productFilters.category;
         const matchesStatus = !productFilters.status
             || (productFilters.status === 'low' && isLow(product))
@@ -3603,6 +5192,8 @@ const filteredProducts = computed(() => {
         if (productSort.value === 'stock_desc') return Number(b.stock_quantity || 0) - Number(a.stock_quantity || 0);
         if (productSort.value === 'sale_desc') return Number(b.sale_price || 0) - Number(a.sale_price || 0);
         if (productSort.value === 'category_asc') return String(a.category?.name || 'Non classé').localeCompare(String(b.category?.name || 'Non classé'), 'fr');
+        if (productSort.value === 'sold_desc') return productSoldQuantity(b) - productSoldQuantity(a);
+        if (productSort.value === 'sold_asc') return productSoldQuantity(a) - productSoldQuantity(b);
         return String(a.name || '').localeCompare(String(b.name || ''), 'fr');
     });
 });
@@ -3611,11 +5202,254 @@ const productsCountLabel = computed(() => {
     const count = filteredProducts.value.length;
     return `${count} produit${count >= 2 ? 's' : ''} affiché${count >= 2 ? 's' : ''}`;
 });
-const availableProducts = computed(() => products.value.filter((product) => Number(product.stock_quantity) > 0));
+const activeServices = computed(() => services.value.filter((service) => service.status === 'active'));
+const serviceSaleCart = computed(() => serviceSaleLines.value.map((line) => {
+    const service = services.value.find((item) => Number(item.id) === Number(line.service_id));
+    const quantity = Number(line.quantity || 0);
 
+    if (!service || quantity <= 0) {
+        return null;
+    }
+
+    const unitPrice = Number(line.unit_price || 0);
+
+    return {
+        key: line.key,
+        service_id: service.id,
+        service_name: service.name,
+        quantity,
+        unit_price: unitPrice,
+        total: Math.max(0, quantity * unitPrice),
+    };
+}).filter(Boolean));
+const serviceSaleTotal = computed(() => serviceSaleCart.value.reduce((total, item) => total + item.total, 0));
+const filteredServices = computed(() => {
+    const term = serviceFilters.search.trim().toLowerCase();
+    const rows = services.value.filter((service) => {
+        const matchesSearch = !term
+            || [service.name, service.details].some((value) => String(value || '').toLowerCase().includes(term));
+
+        return matchesSearch;
+    });
+
+    return [...rows].sort((a, b) => {
+        if (serviceSort.value === 'price_desc') return Number(b.price || 0) - Number(a.price || 0);
+        if (serviceSort.value === 'price_asc') return Number(a.price || 0) - Number(b.price || 0);
+        return String(a.name || '').localeCompare(String(b.name || ''), 'fr');
+    });
+});
+const activeServicesCount = computed(() => activeServices.value.length);
+const averageServicePrice = computed(() => {
+    if (!services.value.length) return 0;
+    return services.value.reduce((sum, service) => sum + Number(service.price || 0), 0) / services.value.length;
+});
+const servicesCountLabel = computed(() => {
+    const count = filteredServices.value.length;
+    return `${count} service${count >= 2 ? 's' : ''} affiché${count >= 2 ? 's' : ''}`;
+});
+const stockCategories = computed(() => {
+    const rows = new Map();
+
+    categories.value.forEach((category) => {
+        rows.set(`category-${category.id}`, {
+            id: category.id,
+            name: category.name,
+            productsCount: 0,
+            stockQuantity: 0,
+            stockValue: 0,
+            lowStockCount: 0,
+        });
+    });
+
+    products.value.forEach((product) => {
+        const key = product.category?.id ? `category-${product.category.id}` : `uncategorized-${product.category?.name || 'Non classé'}`;
+        const name = product.category?.name || 'Non classé';
+        if (!rows.has(key)) {
+            rows.set(key, {
+                id: product.category?.id || null,
+                name,
+                productsCount: 0,
+                stockQuantity: 0,
+                stockValue: 0,
+                lowStockCount: 0,
+            });
+        }
+
+        const row = rows.get(key);
+        const stockQuantity = Number(product.stock_quantity || 0);
+        row.productsCount += 1;
+        row.stockQuantity += stockQuantity;
+        row.stockValue += stockQuantity * Number(product.purchase_price || 0);
+        if (isLow(product)) {
+            row.lowStockCount += 1;
+        }
+    });
+
+    return [...rows.values()];
+});
+const filteredStockCategories = computed(() => {
+    const term = stockCategoryFilters.search.trim().toLowerCase();
+    const rows = stockCategories.value.filter((category) => {
+        const matchesSearch = !term || category.name.toLowerCase().includes(term);
+        const matchesStatus = !stockCategoryFilters.status
+            || (stockCategoryFilters.status === 'low' && category.lowStockCount > 0)
+            || (stockCategoryFilters.status === 'ok' && category.lowStockCount === 0);
+
+        return matchesSearch && matchesStatus;
+    });
+
+    return [...rows].sort((a, b) => {
+        if (stockCategorySort.value === 'value_desc') return Number(b.stockValue || 0) - Number(a.stockValue || 0);
+        if (stockCategorySort.value === 'products_desc') return Number(b.productsCount || 0) - Number(a.productsCount || 0);
+        if (stockCategorySort.value === 'low_desc') return Number(b.lowStockCount || 0) - Number(a.lowStockCount || 0);
+        return a.name.localeCompare(b.name, 'fr');
+    });
+});
+const filteredStockCategoriesValue = computed(() => filteredStockCategories.value.reduce((sum, category) => sum + Number(category.stockValue || 0), 0));
+const stockCategoriesCountLabel = computed(() => {
+    const count = filteredStockCategories.value.length;
+    return `${count} catégorie${count >= 2 ? 's' : ''} affichée${count >= 2 ? 's' : ''}`;
+});
+const filteredStockMovements = computed(() => {
+    const term = stockMovementFilters.search.trim().toLowerCase();
+    const rows = stockMovements.value.filter((movement) => {
+        const movedDate = String(movement.moved_at || '').slice(0, 10);
+        const normalizedType = stockMovementNormalizedType(movement);
+        const matchesSearch = !term
+            || [
+                movement.product?.name,
+                movement.reason,
+                movement.notes,
+                movement.user?.username,
+                movement.user?.name,
+            ].some((value) => String(value || '').toLowerCase().includes(term));
+        const matchesType = !stockMovementFilters.type || normalizedType === stockMovementFilters.type;
+        const matchesExactDate = !stockMovementFilters.exactDate || movedDate === stockMovementFilters.exactDate;
+        const matchesStartDate = !stockMovementFilters.startDate || (movedDate && movedDate >= stockMovementFilters.startDate);
+        const matchesEndDate = !stockMovementFilters.endDate || (movedDate && movedDate <= stockMovementFilters.endDate);
+
+        return matchesSearch && matchesType && matchesExactDate && matchesStartDate && matchesEndDate;
+    });
+
+    return [...rows].sort((a, b) => {
+        if (stockMovementSort.value === 'date_asc') return String(a.moved_at || '').localeCompare(String(b.moved_at || ''));
+        if (stockMovementSort.value === 'quantity_desc') return Math.abs(Number(b.quantity || 0)) - Math.abs(Number(a.quantity || 0));
+        if (stockMovementSort.value === 'quantity_asc') return Math.abs(Number(a.quantity || 0)) - Math.abs(Number(b.quantity || 0));
+        if (stockMovementSort.value === 'product_asc') return String(a.product?.name || '').localeCompare(String(b.product?.name || ''), 'fr');
+        return String(b.moved_at || '').localeCompare(String(a.moved_at || ''));
+    });
+});
+const stockMovementsCountLabel = computed(() => {
+    const count = filteredStockMovements.value.length;
+    return `${count} mouvement${count >= 2 ? 's' : ''} affiché${count >= 2 ? 's' : ''}`;
+});
+const stockMovementsQuantityLabel = computed(() => {
+    const quantity = filteredStockMovements.value.reduce((sum, movement) => sum + Math.abs(Number(movement.quantity || 0)), 0);
+    return `${formatStockQuantity(quantity)} unités`;
+});
+const stockMovementDateFilterLabel = computed(() => {
+    if (stockMovementFilters.exactDate) {
+        return stockMovementFilters.exactDate;
+    }
+
+    if (stockMovementFilters.startDate || stockMovementFilters.endDate) {
+        return `${stockMovementFilters.startDate || 'Début'} - ${stockMovementFilters.endDate || 'Fin'}`;
+    }
+
+    return 'Choisir';
+});
+const stockMovementPrintPeriodLabel = computed(() => {
+    if (stockMovementFilters.exactDate) {
+        return `Date précise : ${stockMovementFilters.exactDate}`;
+    }
+
+    if (stockMovementFilters.startDate || stockMovementFilters.endDate) {
+        return `Période : ${stockMovementFilters.startDate || 'Début'} au ${stockMovementFilters.endDate || 'Fin'}`;
+    }
+
+    return 'Période : tous les mouvements chargés';
+});
+const productDetailsList = computed(() => {
+    const product = selectedProductDetails.value;
+
+    if (!product) {
+        return [];
+    }
+
+    return [
+        { label: 'Produit', value: product.name || '-', icon: 'fa-solid fa-box-open' },
+        { label: 'Catégorie', value: product.category?.name || 'Non classé', icon: 'fa-solid fa-tags' },
+        { label: 'Note', value: product.notes || '-', icon: 'fa-solid fa-note-sticky' },
+        { label: 'Stock actuel', value: product.stock_quantity || 0, icon: 'fa-solid fa-boxes-stacked' },
+        { label: "Seuil d'alerte", value: product.alert_threshold || 0, icon: 'fa-solid fa-triangle-exclamation' },
+        { label: 'État du stock', value: isLow(product) ? 'Stock bas' : 'OK', icon: isLow(product) ? 'fa-solid fa-circle-exclamation' : 'fa-solid fa-circle-check' },
+        { label: "Prix d'achat", value: formatMoney(product.purchase_price || 0), icon: 'fa-solid fa-cart-shopping' },
+        { label: 'Prix de vente', value: formatMoney(product.sale_price || 0), icon: 'fa-solid fa-money-bill-wave' },
+        { label: "Valeur d'achat du stock", value: formatMoney(productPurchaseStockValue(product)), icon: 'fa-solid fa-scale-balanced' },
+        { label: 'Valeur de vente estimée', value: formatMoney(productSaleStockValue(product)), icon: 'fa-solid fa-chart-line' },
+        { label: 'Statut', value: product.is_active === false ? 'Archivé' : 'Actif', icon: product.is_active === false ? 'fa-solid fa-box-archive' : 'fa-solid fa-toggle-on' },
+        { label: 'Créé le', value: formatDateOnly(product.created_at), icon: 'fa-solid fa-calendar-plus' },
+        { label: 'Dernière mise à jour', value: formatDateOnly(product.updated_at), icon: 'fa-solid fa-clock-rotate-left' },
+        { label: 'Quantité vendue', value: productSoldQuantity(product), icon: 'fa-solid fa-receipt' },
+    ];
+});
+const availableProducts = computed(() => products.value.filter((product) => Number(product.stock_quantity) > 0));
+const saleSelectableProducts = computed(() => {
+    if (saleDraftIsProforma.value) {
+        return products.value;
+    }
+
+    return availableProducts.value;
+});
+const filteredSaleCustomers = computed(() => {
+    const term = customerSearch.value.trim().toLowerCase();
+    const rows = term
+        ? customers.value.filter((customer) => customerSaleOptionLabel(customer).toLowerCase().includes(term))
+        : customers.value;
+
+    return rows.slice(0, 8);
+});
+const canCreateSaleCustomer = computed(() => customerSearch.value.trim() !== '' && filteredSaleCustomers.value.length === 0);
+const filteredServiceSaleCustomers = computed(() => {
+    const term = serviceCustomerSearch.value.trim().toLowerCase();
+    const rows = term
+        ? customers.value.filter((customer) => customerSaleOptionLabel(customer).toLowerCase().includes(term))
+        : customers.value;
+
+    return rows.slice(0, 8);
+});
+const canCreateServiceSaleCustomer = computed(() => serviceCustomerSearch.value.trim() !== '' && filteredServiceSaleCustomers.value.length === 0);
+
+const cart = computed(() => saleLines.value.map((line) => {
+    const product = products.value.find((item) => item.id === Number(line.product_id));
+    const quantity = Number(line.quantity || 0);
+
+    if (!product || quantity <= 0) {
+        return null;
+    }
+
+    const unitPrice = currentUser.value?.can_edit_prices && line.unit_price !== ''
+        ? Number(line.unit_price || 0)
+        : Number(product.sale_price || 0);
+    const subtotal = quantity * unitPrice;
+    const discount = Number(line.discount || 0);
+
+    return {
+        product_id: product.id,
+        product_name: product.name,
+        quantity,
+        unit_price: unitPrice,
+        discount,
+        total: Math.max(0, subtotal - discount),
+    };
+}).filter(Boolean));
 const cartTotal = computed(() => cart.value.reduce((total, item) => total + item.total, 0));
-const settingsLogoUrl = computed(() => settingsLogoPreview.value || businessLogoPathUrl(business.value?.logo_path));
-const businessSidebarLogoUrl = computed(() => businessLogoPathUrl(business.value?.logo_path));
+const settingsLogoUrl = computed(() => settingsRemoveLogo.value ? '' : (settingsLogoPreview.value || businessLogoPathUrl(business.value?.logo_path)));
+const businessSidebarLogoUrl = computed(() => settingsRemoveLogo.value ? '' : businessLogoPathUrl(business.value?.logo_path));
+const businessInitial = computed(() => String(business.value?.name || 'B').trim().charAt(0).toUpperCase() || 'B');
+const logoCropImageStyle = computed(() => ({
+    transform: `translate(${logoCrop.x}%, ${logoCrop.y}%) scale(${logoCrop.zoom})`,
+}));
 const secondaryColorSuggestions = computed(() => suggestSecondaryColors(settingsForm.primary_color));
 const settingsPrimaryButtonStyle = computed(() => ({
     backgroundColor: normalizedHexColor(settingsForm.primary_color, '#2f7d69'),
@@ -3671,8 +5505,7 @@ const filteredSales = computed(() => {
         const matchesSearch = !term
             || [
                 sale.number,
-                sale.seller?.name,
-                sale.seller?.phone,
+                sellerDisplayName(sale.seller),
                 sale.customer?.name,
                 sale.customer?.phone,
             ].some((value) => String(value || '').toLowerCase().includes(term));
@@ -3690,7 +5523,7 @@ const filteredSales = computed(() => {
         if (salesSort.value === 'date_asc') return aDate.localeCompare(bDate);
         if (salesSort.value === 'total_desc') return Number(b.total) - Number(a.total);
         if (salesSort.value === 'total_asc') return Number(a.total) - Number(b.total);
-        if (salesSort.value === 'seller_asc') return String(a.seller?.name || '').localeCompare(String(b.seller?.name || ''), 'fr');
+        if (salesSort.value === 'seller_asc') return sellerDisplayName(a.seller).localeCompare(sellerDisplayName(b.seller), 'fr');
         if (salesSort.value === 'payment_asc') return paymentLabel(a.payment_method).localeCompare(paymentLabel(b.payment_method), 'fr');
         return bDate.localeCompare(aDate);
     });
@@ -3711,8 +5544,7 @@ const filteredProformas = computed(() => {
         const matchesSearch = !term
             || [
                 sale.number,
-                sale.seller?.name,
-                sale.seller?.phone,
+                sellerDisplayName(sale.seller),
                 sale.customer?.name,
                 sale.customer?.phone,
             ].some((value) => String(value || '').toLowerCase().includes(term));
@@ -3729,7 +5561,7 @@ const filteredProformas = computed(() => {
         if (salesSort.value === 'date_asc') return aDate.localeCompare(bDate);
         if (salesSort.value === 'total_desc') return Number(b.total) - Number(a.total);
         if (salesSort.value === 'total_asc') return Number(a.total) - Number(b.total);
-        if (salesSort.value === 'seller_asc') return String(a.seller?.name || '').localeCompare(String(b.seller?.name || ''), 'fr');
+        if (salesSort.value === 'seller_asc') return sellerDisplayName(a.seller).localeCompare(sellerDisplayName(b.seller), 'fr');
         return bDate.localeCompare(aDate);
     });
 });
@@ -3738,6 +5570,23 @@ const proformasCountLabel = computed(() => {
     const count = filteredProformas.value.length;
     return `${count} pro forma affichée${count >= 2 ? 's' : ''}`;
 });
+const recentCheckoutDocuments = computed(() => {
+    const expectedType = saleDraftIsProforma.value ? 'proforma' : 'invoice';
+
+    return sales.value
+        .filter((sale) => (sale.type || 'invoice') === expectedType)
+        .sort((first, second) => String(second.sold_at || '').localeCompare(String(first.sold_at || '')))
+        .slice(0, 3);
+});
+const recentCheckoutTitle = computed(() => saleDraftIsProforma.value ? '3 dernières proformas' : '3 dernières factures');
+
+function sellerDisplayName(seller) {
+    return seller?.username || seller?.name || 'Vendeur';
+}
+
+function canCancelSaleFromTable(sale) {
+    return (sale?.type || 'invoice') === 'invoice' && sale?.status !== 'cancelled';
+}
 const displayedSalesRows = computed(() => salesView.value === 'proformas' ? filteredProformas.value : filteredSales.value);
 const salesDateFilterLabel = computed(() => {
     if (salesFilters.exactDate) {
@@ -4158,7 +6007,6 @@ const filteredCustomers = computed(() => {
     return [...rows].sort((a, b) => {
         if (customerSort.value === 'purchases_desc') return Number(b.totalPurchases) - Number(a.totalPurchases);
         if (customerSort.value === 'debt_desc') return Number(b.remainingDebt) - Number(a.remainingDebt);
-        if (customerSort.value === 'invoices_desc') return b.invoices.length - a.invoices.length;
         return a.name.localeCompare(b.name, 'fr');
     });
 });
@@ -4224,6 +6072,15 @@ function formatMoney(value) {
 function phoneInputValue(value) {
     const digits = String(value || '').replace(/\D/g, '');
     return digits.startsWith('01') ? digits.slice(2, 10) : digits.slice(0, 8);
+}
+
+function formatPhoneDisplay(value) {
+    const digits = String(value || '').replace(/\D/g, '');
+    if (!digits) {
+        return '-';
+    }
+
+    return digits.match(/.{1,2}/g)?.join(' ') || digits;
 }
 
 function phoneWithPrefix(value) {
@@ -4326,6 +6183,7 @@ function resetDefaultColors() {
 function requestHeaders(extra = {}) {
     return {
         'X-CSRF-TOKEN': props.csrfToken,
+        'X-Requested-With': 'XMLHttpRequest',
         Accept: 'application/json',
         ...extra,
     };
@@ -4334,12 +6192,101 @@ function requestHeaders(extra = {}) {
 async function enhanceTables() {
     await nextTick();
 
+    const normalizeHeader = (value) => String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase();
+    const iconForHeader = (header) => {
+        const value = normalizeHeader(header);
+        if (value.includes('date') || value.includes('echeance') || value.includes('periode') || value.includes('embauche')) return 'fa-solid fa-calendar-day';
+        if (value.includes('duree')) return 'fa-solid fa-clock';
+        if (value.includes('montant') || value.includes('prix') || value.includes('salaire') || value.includes('net') || value.includes('brut') || value.includes('total') || value.includes('reste') || value.includes('paye') || value.includes('achats') || value.includes('creances') || value.includes('avances')) return 'fa-solid fa-money-bill-wave';
+        if (value.includes('client') || value.includes('employe') || value.includes('fournisseur') || value.includes('vendeur')) return 'fa-solid fa-user-tie';
+        if (value.includes('service')) return 'fa-solid fa-bell-concierge';
+        if (value.includes('produit') || value.includes('stock') || value.includes('seuil') || value.includes('categorie')) return 'fa-solid fa-box';
+        if (value.includes('telephone')) return 'fa-solid fa-phone';
+        if (value.includes('statut') || value.includes('etat') || value.includes('situation')) return 'fa-solid fa-circle-check';
+        if (value.includes('facture')) return 'fa-solid fa-file-invoice';
+        if (value.includes('note')) return 'fa-solid fa-note-sticky';
+        if (value.includes('action') || value.includes('option')) return 'fa-solid fa-screwdriver-wrench';
+        return 'fa-solid fa-table-list';
+    };
+    const cellClassForHeader = (header) => {
+        const value = normalizeHeader(header);
+        if (value.includes('date') || value.includes('echeance') || value.includes('periode') || value.includes('embauche')) return 'table-date-cell';
+        if (value.includes('montant') || value.includes('prix') || value.includes('salaire') || value.includes('net') || value.includes('brut') || value.includes('total') || value.includes('reste') || value.includes('paye') || value.includes('achats') || value.includes('creances') || value.includes('avances')) return 'table-money-cell';
+        if (value.includes('client') || value.includes('employe') || value.includes('fournisseur') || value.includes('vendeur') || value.includes('produit') || value.includes('service') || value.includes('charge')) return 'table-main-cell';
+        if (value.includes('duree')) return 'table-date-cell';
+        if (value.includes('note')) return 'table-note-cell';
+        if (value.includes('action') || value.includes('option')) return 'table-actions-cell';
+        return '';
+    };
+    const formatMoneyCell = (cell) => {
+        if (cell.dataset.moneyFormatted || cell.querySelector('input, button, a, select, textarea, .status')) {
+            return;
+        }
+
+        const target = cell.querySelector('strong, b') || cell;
+        const text = target.textContent.trim();
+
+        if (!text || text.includes('FCFA') || /[A-Za-zÀ-ÿ]/.test(text)) {
+            return;
+        }
+
+        const numeric = Number(text.replace(/\s/g, '').replace(',', '.'));
+
+        if (Number.isNaN(numeric)) {
+            return;
+        }
+
+        target.textContent = formatMoney(numeric);
+        cell.dataset.moneyFormatted = '1';
+    };
+
     document.querySelectorAll('.table-wrap table').forEach((table) => {
-        const headers = Array.from(table.querySelectorAll('thead th')).map((item) => item.textContent.trim());
+        const headerCells = Array.from(table.querySelectorAll('thead th'));
+        headerCells.forEach((headerCell) => {
+            if (!headerCell.classList.contains('no-table-icon') && !headerCell.querySelector('i')) {
+                const icon = document.createElement('i');
+                icon.className = iconForHeader(headerCell.textContent);
+                headerCell.prepend(icon);
+            }
+        });
+        const headers = headerCells.map((item) => item.textContent.trim());
+        const headersWithoutIcon = headerCells.map((item) => item.classList.contains('no-table-icon'));
         table.querySelectorAll('tbody tr').forEach((row) => {
             row.querySelectorAll('td').forEach((cell, index) => {
                 if (!cell.hasAttribute('data-label') && headers[index]) {
                     cell.setAttribute('data-label', headers[index]);
+                }
+                if (headers[index] && !headersWithoutIcon[index] && !cell.dataset.labelIcon) {
+                    cell.dataset.labelIcon = iconForHeader(headers[index]);
+                }
+                const className = cellClassForHeader(headers[index]);
+                if (className) {
+                    cell.classList.add(className);
+                }
+                if (className === 'table-money-cell') {
+                    formatMoneyCell(cell);
+                }
+                if (
+                    className
+                    && !cell.classList.contains('table-actions-cell')
+                    && !cell.classList.contains('empty')
+                    && !headersWithoutIcon[index]
+                    && !cell.querySelector('i')
+                ) {
+                    const icon = document.createElement('i');
+                    icon.className = `table-cell-icon ${iconForHeader(headers[index])}`;
+                    cell.prepend(icon);
+                }
+                if (headers[index] && !cell.querySelector(':scope > .mobile-cell-label')) {
+                    const label = document.createElement('span');
+                    label.className = 'mobile-cell-label';
+                    label.innerHTML = headersWithoutIcon[index]
+                        ? `<span>${headers[index]}</span>`
+                        : `<i class="${iconForHeader(headers[index])}"></i><span>${headers[index]}</span>`;
+                    cell.prepend(label);
                 }
             });
         });
@@ -4361,8 +6308,135 @@ async function enhanceTables() {
     });
 }
 
-watch([activeSection, customerView, supplierView, salesView, employeeView, payrollSubView, filteredProducts, filteredSales, filteredProformas, filteredExpenses, filteredReceivables, filteredCustomers, filteredSupplierDebts, filteredSuppliers, filteredEmployees, filteredPayrolls, filteredAdvances], () => {
-    enhanceTables();
+async function enhancePageChrome() {
+    await nextTick();
+
+    const normalizeText = (value) => String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase();
+    const iconForText = (text) => {
+        const value = normalizeText(text);
+        if (value.includes('personnel') || value.includes('employe')) return 'fa-solid fa-user-tie';
+        if (value.includes('paie') || value.includes('salaire') || value.includes('avance')) return 'fa-solid fa-file-invoice-dollar';
+        if (value.includes('charge') || value.includes('depense')) return 'fa-solid fa-wallet';
+        if (value.includes('produit') || value.includes('stock')) return 'fa-solid fa-boxes-stacked';
+        if (value.includes('vente') || value.includes('facture') || value.includes('caisse')) return 'fa-solid fa-cash-register';
+        if (value.includes('client') || value.includes('creance')) return 'fa-solid fa-users';
+        if (value.includes('fournisseur') || value.includes('dette')) return 'fa-solid fa-truck';
+        if (value.includes('notification')) return 'fa-solid fa-bell';
+        if (value.includes('rapport')) return 'fa-solid fa-chart-column';
+        if (value.includes('parametre') || value.includes('profil')) return 'fa-solid fa-gear';
+        if (value.includes('impot') || value.includes('comptabilite') || value.includes('bilan')) return 'fa-solid fa-file-invoice-dollar';
+        if (value.includes('imprimer')) return 'fa-solid fa-print';
+        if (value.includes('date') || value.includes('periode')) return 'fa-solid fa-calendar-days';
+        if (value.includes('rechercher')) return 'fa-solid fa-magnifying-glass';
+        if (value.includes('trier')) return 'fa-solid fa-arrow-down-wide-short';
+        if (value.includes('statut') || value.includes('etat') || value.includes('situation')) return 'fa-solid fa-circle-check';
+        if (value.includes('categorie') || value.includes('type')) return 'fa-solid fa-tags';
+        return 'fa-solid fa-layer-group';
+    };
+
+    document.querySelectorAll('main .section-title h2').forEach((title) => {
+        if (title.closest('.modal-backdrop') || title.querySelector(':scope > .section-title-icon')) {
+            return;
+        }
+        const icon = document.createElement('span');
+        icon.className = 'section-title-icon';
+        icon.innerHTML = `<i class="${iconForText(title.textContent)}"></i>`;
+        title.prepend(icon);
+    });
+
+    document.querySelectorAll('.filters-grid label, .filter-control').forEach((control) => {
+        if (control.querySelector(':scope > .filter-label-icon')) {
+            return;
+        }
+        const textNode = Array.from(control.childNodes).find((node) => node.nodeType === Node.TEXT_NODE && node.textContent.trim());
+        const span = control.querySelector(':scope > span');
+        const text = textNode?.textContent.trim() || span?.textContent.trim() || '';
+        if (!text) {
+            return;
+        }
+        const label = document.createElement('span');
+        label.className = 'filter-label-icon';
+        label.innerHTML = `<i class="${iconForText(text)}"></i><span>${text}</span>`;
+        if (textNode) {
+            textNode.textContent = '';
+        } else if (span) {
+            span.remove();
+        }
+        control.prepend(label);
+    });
+}
+
+function setupResponsiveFilterPanels() {
+    document.querySelectorAll('main .filters-grid').forEach((panel) => {
+        if (panel.closest('.modal-backdrop')) {
+            return;
+        }
+
+        panel.classList.add('responsive-filter-panel');
+        if (panel.dataset.responsiveFilterReady === '1') {
+            return;
+        }
+
+        panel.dataset.responsiveFilterReady = '1';
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'responsive-filter-toggle';
+        button.setAttribute('aria-expanded', 'false');
+        button.innerHTML = '<i class="fa-solid fa-sliders"></i><span>Déplier les options de recherche, tri et filtres</span>';
+
+        button.addEventListener('click', () => {
+            const isOpen = panel.classList.toggle('filters-open');
+            button.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+            button.innerHTML = isOpen
+                ? '<i class="fa-solid fa-chevron-up"></i><span>Replier les options de recherche, tri et filtres</span>'
+                : '<i class="fa-solid fa-sliders"></i><span>Déplier les options de recherche, tri et filtres</span>';
+        });
+
+        panel.parentNode?.insertBefore(button, panel);
+    });
+}
+
+function setupCompactNavWatcher() {
+    if (typeof window === 'undefined') {
+        return;
+    }
+
+    compactNavMediaQuery = window.matchMedia('(max-width: 1000px)');
+    compactNavMediaHandler = () => {
+        isCompactNav.value = compactNavMediaQuery.matches;
+    };
+    compactNavMediaHandler();
+
+    if (compactNavMediaQuery.addEventListener) {
+        compactNavMediaQuery.addEventListener('change', compactNavMediaHandler);
+    } else {
+        compactNavMediaQuery.addListener(compactNavMediaHandler);
+    }
+}
+
+function cleanupCompactNavWatcher() {
+    if (!compactNavMediaQuery || !compactNavMediaHandler) {
+        return;
+    }
+
+    if (compactNavMediaQuery.removeEventListener) {
+        compactNavMediaQuery.removeEventListener('change', compactNavMediaHandler);
+    } else {
+        compactNavMediaQuery.removeListener(compactNavMediaHandler);
+    }
+}
+
+async function enhanceUi() {
+    await enhanceTables();
+    await enhancePageChrome();
+    setupResponsiveFilterPanels();
+}
+
+watch([activeSection, customerView, supplierView, salesView, stockView, stockPageView, servicePageView, employeeView, payrollSubView, filteredProducts, filteredServices, filteredStockCategories, filteredStockMovements, filteredSales, filteredProformas, filteredExpenses, filteredReceivables, filteredCustomers, filteredSupplierDebts, filteredSuppliers, filteredEmployees, filteredPayrolls, filteredAdvances], () => {
+    enhanceUi();
 }, { flush: 'post' });
 
 watch(() => employeeForm.type, (type) => {
@@ -4382,21 +6456,84 @@ watch([currentUserCanSell, activeSection], () => {
         activeSection.value = 'seller-cashier';
     }
 
-    if (activeSection.value === 'seller-cashier') {
-        saleForm.type = 'invoice';
-    }
-
-    if (activeSection.value === 'seller-proforma') {
-        saleForm.type = 'proforma';
-    }
-
-    if (activeSection.value === 'seller-sales') {
-        salesView.value = 'invoices';
-    }
 }, { immediate: true });
 
 function isLow(product) {
     return Number(product.stock_quantity) <= Number(product.alert_threshold);
+}
+
+function stockMovementNormalizedType(movement) {
+    if (movement?.type === 'sale') {
+        return 'sale';
+    }
+
+    if (movement?.type === 'in' || Number(movement?.quantity || 0) > 0) {
+        return 'in';
+    }
+
+    return 'out';
+}
+
+function stockMovementTypeLabel(movement) {
+    return {
+        in: 'Entrée',
+        out: 'Sortie',
+        sale: 'Vente',
+    }[stockMovementNormalizedType(movement)] || 'Mouvement';
+}
+
+function stockMovementUserDisplay(movement) {
+    if (stockMovementNormalizedType(movement) === 'sale') {
+        return movement?.user?.username || movement?.user?.name || '-';
+    }
+
+    return movement?.user?.name || movement?.user?.username || '-';
+}
+
+function stockMovementStatusClass(movement) {
+    return {
+        in: 'ok',
+        out: 'danger',
+        sale: 'wait',
+    }[stockMovementNormalizedType(movement)] || 'neutral';
+}
+
+function openStockMovementDateFilter() {
+    stockMovementDateMode.value = stockMovementFilters.startDate || stockMovementFilters.endDate ? 'range' : 'exact';
+    Object.assign(stockMovementDateDraft, {
+        exactDate: stockMovementFilters.exactDate,
+        startDate: stockMovementFilters.startDate,
+        endDate: stockMovementFilters.endDate,
+    });
+    showStockMovementDateModal.value = true;
+}
+
+function applyStockMovementDateFilter() {
+    if (stockMovementDateMode.value === 'exact') {
+        stockMovementFilters.exactDate = stockMovementDateDraft.exactDate;
+        stockMovementFilters.startDate = '';
+        stockMovementFilters.endDate = '';
+    } else {
+        stockMovementFilters.exactDate = '';
+        stockMovementFilters.startDate = stockMovementDateDraft.startDate;
+        stockMovementFilters.endDate = stockMovementDateDraft.endDate;
+    }
+
+    showStockMovementDateModal.value = false;
+}
+
+function clearStockMovementDateFilter() {
+    Object.assign(stockMovementFilters, {
+        exactDate: '',
+        startDate: '',
+        endDate: '',
+    });
+    Object.assign(stockMovementDateDraft, {
+        exactDate: '',
+        startDate: '',
+        endDate: '',
+    });
+    showStockMovementDateModal.value = false;
 }
 
 function paymentLabel(method) {
@@ -4405,6 +6542,24 @@ function paymentLabel(method) {
         mobile_money: 'Mobile Money',
         credit: 'Crédit',
     }[method] || method;
+}
+
+function saleStatusLabel(status) {
+    return {
+        completed: 'Validée',
+        draft: 'Brouillon',
+        cancelled: 'Annulée',
+        paid: 'Payée',
+        pending: 'En attente',
+    }[status] || status || '-';
+}
+
+function saleStatusClass(status) {
+    return {
+        completed: 'ok',
+        draft: 'wait',
+        cancelled: 'danger',
+    }[status] || 'neutral';
 }
 
 function receivableStatusLabel(status) {
@@ -4423,17 +6578,39 @@ function receivableStatusClass(status) {
     }[status] || 'ok';
 }
 
+function payrollStatusLabel(status) {
+    return {
+        pending: 'En attente',
+        paid: 'Payée',
+    }[status] || status || '-';
+}
+
 function normalizeWhatsappPhone(phone) {
     const digits = String(phone || '').replace(/\D/g, '');
     if (!digits) {
         return '';
     }
 
-    if (digits.startsWith('229')) {
+    if (digits.startsWith('22901')) {
         return digits;
     }
 
-    return `229${digits.replace(/^0+/, '')}`;
+    if (digits.startsWith('229')) {
+        const nationalNumber = digits.slice(3);
+        return nationalNumber.startsWith('0')
+            ? `229${nationalNumber}`
+            : `2290${nationalNumber}`;
+    }
+
+    if (digits.startsWith('01')) {
+        return `229${digits}`;
+    }
+
+    if (digits.length === 8) {
+        return `22901${digits}`;
+    }
+
+    return digits.startsWith('0') ? `229${digits}` : `22901${digits}`;
 }
 
 function receivableWhatsappUrl(receivable) {
@@ -4521,6 +6698,28 @@ function formatDate(value) {
     return `${day}/${month}/${year} à ${time}`;
 }
 
+function splitDateTime(value) {
+    if (!value) {
+        return { date: '-', time: '' };
+    }
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+        return { date: String(value), time: '' };
+    }
+
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    const time = new Intl.DateTimeFormat('fr-FR', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+    }).format(date);
+
+    return { date: `${day}/${month}/${year}`, time };
+}
+
 function formatDateOnly(value) {
     if (!value) {
         return '-';
@@ -4532,6 +6731,15 @@ function formatDateOnly(value) {
     }
 
     return formatDate(value);
+}
+
+function inputDateValue(value) {
+    if (!value) {
+        return '';
+    }
+
+    const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/);
+    return match ? `${match[1]}-${match[2]}-${match[3]}` : '';
 }
 
 function formatDayMonth(value) {
@@ -4578,6 +6786,31 @@ function printEscapeHtml(value) {
         .replaceAll("'", '&#039;');
 }
 
+function printSummary(parts) {
+    return parts.filter(Boolean).join(' - ');
+}
+
+function printDateFilterSummary(filters) {
+    if (filters.exactDate) {
+        return `Date précise : ${filters.exactDate}`;
+    }
+
+    if (filters.startDate || filters.endDate) {
+        return `Période : ${filters.startDate || 'Début'} au ${filters.endDate || 'Fin'}`;
+    }
+
+    return 'Période : toutes les dates';
+}
+
+function printSearchSummary(search) {
+    const term = String(search || '').trim();
+    return term ? `Recherche : ${term}` : '';
+}
+
+function printFilterSummary(label, value) {
+    return value ? `${label} : ${value}` : '';
+}
+
 function businessLogoPathUrl(logoPath) {
     if (!logoPath) {
         return '';
@@ -4602,25 +6835,30 @@ function businessLogoUrl() {
 function printBusinessHeaderHtml() {
     const logoUrl = businessLogoUrl();
     const details = [
-        business.value?.phone ? `Tél. ${business.value.phone}` : '',
-        business.value?.show_address_on_documents && business.value?.address ? business.value.address : '',
-        business.value?.show_ifu_on_documents && business.value?.ifu ? `IFU : ${business.value.ifu}` : '',
-        business.value?.show_slogan_on_documents && business.value?.slogan ? business.value.slogan : '',
+        business.value?.show_phone_on_documents && business.value?.phone ? ['fa-solid fa-phone', `Tél. boutique : ${formatPhoneDisplay(business.value.phone)}`] : null,
+        business.value?.show_whatsapp_on_documents && business.value?.whatsapp_phone ? ['fa-brands fa-whatsapp', `WhatsApp boutique : ${formatPhoneDisplay(business.value.whatsapp_phone)}`] : null,
+        business.value?.show_address_on_documents && business.value?.address ? ['fa-solid fa-location-dot', business.value.address] : null,
+        business.value?.show_ifu_on_documents && business.value?.ifu ? ['fa-solid fa-id-card', `IFU : ${business.value.ifu}`] : null,
+        business.value?.show_slogan_on_documents && business.value?.slogan ? ['fa-solid fa-quote-left', business.value.slogan] : null,
     ].filter(Boolean);
+    const description = business.value?.show_description_on_documents && business.value?.description
+        ? `<p><i class="fa-solid fa-align-left"></i>${printEscapeHtml(business.value.description)}</p>`
+        : '';
 
     return `
         <header class="doc-header">
-            ${logoUrl ? `<img src="${printEscapeHtml(logoUrl)}" alt="Logo">` : '<div class="doc-logo">EM</div>'}
+            ${logoUrl ? `<img src="${printEscapeHtml(logoUrl)}" alt="Logo">` : '<div class="doc-logo"><i class="fa-solid fa-store"></i></div>'}
             <div>
                 <h2>${printEscapeHtml(business.value?.name || 'Boutique')}</h2>
-                ${details.map((item) => `<p>${printEscapeHtml(item)}</p>`).join('')}
+                ${description}
+                ${details.map(([icon, item]) => `<p><i class="${icon}"></i>${printEscapeHtml(item)}</p>`).join('')}
             </div>
         </header>
     `;
 }
 
 function printDocumentFooterHtml() {
-    return `<footer class="doc-footer">Document généré avec l'application Easy_Market le ${formatDate(new Date())}</footer>`;
+    return `<footer class="doc-footer"><i class="fa-solid fa-circle-check"></i>Document généré avec l'application Easy_Market le ${formatDate(new Date())}</footer>`;
 }
 
 function printDocumentStyles() {
@@ -4629,15 +6867,17 @@ function printDocumentStyles() {
         .doc-header{display:flex;align-items:center;gap:14px;border-bottom:2px solid #10251f;padding-bottom:14px;margin-bottom:18px}
         .doc-header img,.doc-logo{width:58px;height:58px;border-radius:10px;object-fit:cover}
         .doc-logo{display:grid;place-items:center;background:linear-gradient(135deg,#2f7d69,#f5b84b);color:#10251f;font-weight:800}
+        .doc-logo i{font-size:24px}
         .doc-header h2{margin:0 0 4px;font-size:24px}
-        .doc-header p{margin:1px 0;color:#52635b;font-size:13px}
-        h1{margin:0 0 6px}
-        p{margin:0 0 18px;color:#52635b}
+        .doc-header p{margin:1px 0;color:#52635b;font-size:13px;display:flex;align-items:center;gap:7px}
+        .doc-header p i,.doc-title i,.doc-summary i,.doc-footer i{color:#2f7d69}
+        .doc-title{margin:0 0 6px;display:flex;align-items:center;gap:10px}
+        .doc-summary{margin:0 0 18px;color:#52635b;display:flex;align-items:center;gap:8px}
         table{width:100%;border-collapse:collapse}
         th,td{border:1px solid #dfe7e2;padding:9px;text-align:left;vertical-align:top}
         th{background:#10251f;color:white}
         tfoot td{font-weight:800}
-        .doc-footer{margin-top:auto;padding-top:12px;border-top:1px solid #dfe7e2;color:#52635b;font-size:12px;text-align:center}
+        .doc-footer{margin-top:auto;padding-top:12px;border-top:1px solid #dfe7e2;color:#52635b;font-size:12px;text-align:center;display:flex;align-items:center;justify-content:center;gap:7px}
         @media print{body{min-height:100vh}}
     `;
 }
@@ -4649,12 +6889,13 @@ function writePrintableDocument(printWindow, title, summary, tableHtml) {
         <head>
             <meta charset="utf-8">
             <title>${printEscapeHtml(title)}</title>
+            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
             <style>${printDocumentStyles()}</style>
         </head>
         <body>
             ${printBusinessHeaderHtml()}
-            <h1>${printEscapeHtml(title)}</h1>
-            <p>${summary}</p>
+            <h1 class="doc-title"><i class="fa-solid fa-file-lines"></i>${printEscapeHtml(title)}</h1>
+            <p class="doc-summary"><i class="fa-solid fa-circle-info"></i><span>${summary}</span></p>
             ${tableHtml}
             ${printDocumentFooterHtml()}
             <script>window.print();<\/script>
@@ -4666,7 +6907,13 @@ function writePrintableDocument(printWindow, title, summary, tableHtml) {
 
 async function loadDashboard() {
     dashboardLoaded.value = false;
-    const response = await fetch(`/api/businesses/${props.businessId}/dashboard`);
+    const response = await fetch(`/api/businesses/${props.businessId}/dashboard`, {
+        credentials: 'same-origin',
+        headers: requestHeaders(),
+    });
+    if (!response.ok) {
+        throw new Error(`Chargement du tableau de bord impossible (${response.status}).`);
+    }
     const data = await response.json();
 
     business.value = data.business;
@@ -4682,20 +6929,34 @@ async function loadDashboard() {
     }
     Object.assign(settingsForm, {
         name: data.business?.name || '',
+        user_phone: data.current_user?.phone || '',
+        user_whatsapp_phone: data.current_user?.whatsapp_phone || '',
         phone: data.business?.phone || '',
         whatsapp_phone: data.business?.whatsapp_phone || '',
+        whatsapp_report_phone: data.business?.whatsapp_report_phone || data.business?.whatsapp_phone || '',
         address: data.business?.address || '',
         ifu: data.business?.ifu || '',
         slogan: data.business?.slogan || '',
+        description: data.business?.description || '',
         primary_color: data.business?.primary_color || '#2f7d69',
         secondary_color: data.business?.secondary_color || '#f5b84b',
+        whatsapp_reports_enabled: Boolean(data.business?.whatsapp_reports_enabled),
+        whatsapp_report_time: data.business?.whatsapp_report_time?.slice(0, 5) || '08:00',
+        whatsapp_report_type: data.business?.whatsapp_report_type || 'global',
         show_logo_on_documents: Boolean(data.business?.show_logo_on_documents),
         show_ifu_on_documents: Boolean(data.business?.show_ifu_on_documents),
         show_slogan_on_documents: Boolean(data.business?.show_slogan_on_documents),
+        show_description_on_documents: Boolean(data.business?.show_description_on_documents),
+        show_phone_on_documents: data.business?.show_phone_on_documents !== false,
+        show_whatsapp_on_documents: data.business?.show_whatsapp_on_documents !== false,
         show_address_on_documents: Boolean(data.business?.show_address_on_documents),
     });
     settingsLogoFile.value = null;
     settingsLogoPreview.value = '';
+    settingsRemoveLogo.value = false;
+    showLogoCropModal.value = false;
+    logoCropImageUrl.value = '';
+    logoCropSourceFile.value = null;
     subscription.value = data.subscription;
     subscriptionPlans.value = data.subscription_plans || {};
     if (subscription.value?.plan) {
@@ -4704,7 +6965,10 @@ async function loadDashboard() {
     if (subscription.value?.deposit_phone) {
         subscriptionForm.deposit_phone = subscription.value.deposit_phone;
     }
+    categories.value = data.categories || [];
     products.value = data.products;
+    services.value = data.services || [];
+    stockMovements.value = data.stock_movements || [];
     products.value.forEach((product) => {
         productPriceForms[product.id] = Number(product.sale_price || 0);
     });
@@ -4728,18 +6992,133 @@ async function loadDashboard() {
     notifications.value = data.notifications;
     Object.assign(summary, data.summary);
 
-    const taxesResponse = await fetch(`/api/businesses/${props.businessId}/taxes`);
+    await loadTaxes();
+    dashboardLoaded.value = true;
+    await enhanceUi();
+}
+
+async function loadTaxes() {
+    if (!canApplyTaxPeriod.value) {
+        notifyError('Choisissez une période fiscale valide.');
+        return;
+    }
+
+    const taxesResponse = await fetch(buildTaxApiUrl(), {
+        credentials: 'same-origin',
+        headers: requestHeaders(),
+    });
+    if (!taxesResponse.ok) {
+        throw new Error(`Chargement des données fiscales impossible (${taxesResponse.status}).`);
+    }
     const taxes = await taxesResponse.json();
     taxFaq.value = taxes.faq;
     taxStatement.value = taxes.statement;
-    dashboardLoaded.value = true;
-    await enhanceTables();
+    taxDocuments.value = taxes.documents || [];
+    taxDisclaimer.value = taxes.disclaimer || 'Ces documents sont des supports de gestion et ne constituent pas des documents légaux.';
 }
 
 function onSettingsLogoChange(event) {
     const file = event.target.files?.[0] || null;
+    if (!file) {
+        return;
+    }
+
+    if (settingsLogoPreview.value) {
+        URL.revokeObjectURL(settingsLogoPreview.value);
+    }
+    if (logoCropImageUrl.value) {
+        URL.revokeObjectURL(logoCropImageUrl.value);
+    }
+
     settingsLogoFile.value = file;
-    settingsLogoPreview.value = file ? URL.createObjectURL(file) : '';
+    settingsRemoveLogo.value = false;
+    logoCropSourceFile.value = file;
+    logoCropImageUrl.value = URL.createObjectURL(file);
+    settingsLogoPreview.value = logoCropImageUrl.value;
+    Object.assign(logoCrop, { zoom: 1, x: 0, y: 0 });
+    showLogoCropModal.value = true;
+    event.target.value = '';
+}
+
+function openLogoCropModal() {
+    if (!logoCropImageUrl.value && settingsLogoPreview.value) {
+        logoCropImageUrl.value = settingsLogoPreview.value;
+    }
+
+    if (logoCropImageUrl.value) {
+        showLogoCropModal.value = true;
+    }
+}
+
+function closeLogoCropModal() {
+    showLogoCropModal.value = false;
+}
+
+async function removeSettingsLogo() {
+    if (!window.confirm('Supprimer le logo actuel de la boutique ?')) {
+        return;
+    }
+
+    settingsLogoFile.value = null;
+    logoCropSourceFile.value = null;
+    if (settingsLogoPreview.value) {
+        URL.revokeObjectURL(settingsLogoPreview.value);
+    }
+    settingsLogoPreview.value = '';
+    logoCropImageUrl.value = '';
+    settingsRemoveLogo.value = true;
+    settingsForm.show_logo_on_documents = false;
+    await saveSettings();
+}
+
+async function applyLogoCrop() {
+    if (!logoCropImageUrl.value) {
+        closeLogoCropModal();
+        return;
+    }
+
+    const image = new Image();
+    image.src = logoCropImageUrl.value;
+    await new Promise((resolve, reject) => {
+        image.onload = resolve;
+        image.onerror = reject;
+    });
+
+    const size = 512;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const context = canvas.getContext('2d');
+    context.fillStyle = '#ffffff';
+    context.fillRect(0, 0, size, size);
+
+    const scale = Math.max(size / image.naturalWidth, size / image.naturalHeight) * Number(logoCrop.zoom || 1);
+    const width = image.naturalWidth * scale;
+    const height = image.naturalHeight * scale;
+    const x = (size - width) / 2 + (Number(logoCrop.x || 0) / 100) * size;
+    const y = (size - height) / 2 + (Number(logoCrop.y || 0) / 100) * size;
+    context.drawImage(image, x, y, width, height);
+
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png', 0.92));
+    if (!blob) {
+        notifyError('Impossible de rogner le logo.');
+        return;
+    }
+
+    const fileName = logoCropSourceFile.value?.name?.replace(/\.[^.]+$/, '') || 'logo';
+    settingsLogoFile.value = new File([blob], `${fileName}-rogne.png`, { type: 'image/png' });
+    const croppedUrl = URL.createObjectURL(blob);
+    if (settingsLogoPreview.value) {
+        URL.revokeObjectURL(settingsLogoPreview.value);
+    }
+    if (logoCropImageUrl.value && logoCropImageUrl.value !== settingsLogoPreview.value) {
+        URL.revokeObjectURL(logoCropImageUrl.value);
+    }
+    settingsLogoPreview.value = croppedUrl;
+    logoCropImageUrl.value = croppedUrl;
+    settingsRemoveLogo.value = false;
+    settingsForm.show_logo_on_documents = true;
+    closeLogoCropModal();
 }
 
 async function saveSettings() {
@@ -4747,6 +7126,10 @@ async function saveSettings() {
     settingsMessage.value = '';
 
     try {
+        if (settingsForm.whatsapp_reports_enabled && (!settingsForm.whatsapp_report_phone || !settingsForm.whatsapp_report_time)) {
+            throw new Error('Renseignez le numéro WhatsApp et l’heure d’envoi des rapports.');
+        }
+
         const payload = new FormData();
         Object.entries(settingsForm).forEach(([key, value]) => {
             payload.append(key, typeof value === 'boolean' ? (value ? '1' : '0') : (value ?? ''));
@@ -4755,6 +7138,7 @@ async function saveSettings() {
         if (settingsLogoFile.value) {
             payload.append('logo', settingsLogoFile.value);
         }
+        payload.append('remove_logo', settingsRemoveLogo.value ? '1' : '0');
 
         const response = await fetch(`/api/businesses/${props.businessId}/settings`, {
             method: 'POST',
@@ -4770,6 +7154,7 @@ async function saveSettings() {
         business.value = await response.json();
         settingsLogoFile.value = null;
         settingsLogoPreview.value = '';
+        settingsRemoveLogo.value = false;
         settingsMessage.value = 'Paramètres boutique enregistrés.';
         notifySuccess(settingsMessage.value);
     } catch (error) {
@@ -4872,10 +7257,14 @@ async function markAllNotificationsRead() {
 async function saveProduct() {
     saving.value = true;
     message.value = '';
+    const wasEditing = Boolean(editingProduct.value);
 
     try {
-        const response = await fetch(`/api/businesses/${props.businessId}/products`, {
-            method: 'POST',
+        const url = editingProduct.value
+            ? `/api/businesses/${props.businessId}/products/${editingProduct.value.id}`
+            : `/api/businesses/${props.businessId}/products`;
+        const response = await fetch(url, {
+            method: editingProduct.value ? 'PUT' : 'POST',
             headers: requestHeaders({ 'Content-Type': 'application/json' }),
             body: JSON.stringify(form),
         });
@@ -4888,17 +7277,17 @@ async function saveProduct() {
         Object.assign(form, {
             name: '',
             category_name: '',
-            unit: 'unité',
             purchase_price: '',
             sale_price: '',
             stock_quantity: '',
             alert_threshold: '',
+            notes: '',
         });
 
-        message.value = 'Produit ajouté avec succès.';
+        message.value = wasEditing ? 'Produit modifié avec succès.' : 'Produit ajouté avec succès.';
         notifySuccess(message.value);
         await loadDashboard();
-        showProductModal.value = false;
+        closeProductModal();
     } catch (error) {
         message.value = error.message;
         notifyError(message.value);
@@ -4907,52 +7296,538 @@ async function saveProduct() {
     }
 }
 
-async function updateSellerProductPrice(product) {
-    const salePrice = Number(productPriceForms[product.id] || 0);
-
-    try {
-        const response = await fetch(`/api/businesses/${props.businessId}/products/${product.id}/price`, {
-            method: 'PATCH',
-            headers: requestHeaders({ 'Content-Type': 'application/json' }),
-            body: JSON.stringify({ sale_price: salePrice }),
-        });
-
-        if (!response.ok) {
-            const data = await response.json();
-            throw new Error(data.message || 'Prix invalide.');
-        }
-
-        const updatedProduct = await response.json();
-        const index = products.value.findIndex((item) => item.id === product.id);
-        if (index !== -1) {
-            products.value[index] = updatedProduct;
-            productPriceForms[updatedProduct.id] = Number(updatedProduct.sale_price || 0);
-        }
-        notifySuccess('Prix de vente modifié.');
-    } catch (error) {
-        productPriceForms[product.id] = Number(product.sale_price || 0);
-        notifyError(error.message);
+function openProductModal(product = null) {
+    if (product instanceof Event) {
+        product = null;
     }
-}
 
-function openProductModal() {
     message.value = '';
+    editingProduct.value = product;
     Object.assign(form, {
-        name: '',
-        category_name: '',
-        unit: 'unité',
-        purchase_price: '',
-        sale_price: '',
-        stock_quantity: '',
-        alert_threshold: '',
+        name: product?.name || '',
+        category_name: product?.category?.name || defaultProductCategoryName,
+        purchase_price: product?.purchase_price || '',
+        sale_price: product?.sale_price || '',
+        stock_quantity: product?.stock_quantity || '',
+        alert_threshold: product?.alert_threshold || '',
+        notes: product?.notes || '',
     });
     showProductModal.value = true;
 }
 
+function closeProductModal() {
+    showProductModal.value = false;
+    editingProduct.value = null;
+}
+
+function openServiceModal(service = null) {
+    if (service instanceof Event) {
+        service = null;
+    }
+
+    editingService.value = service;
+    Object.assign(serviceForm, {
+        name: service?.name || '',
+        price: Number(service?.price || 0),
+        duration: service?.duration || '',
+        status: service?.status || 'active',
+        details: service?.details || '',
+    });
+    showServiceModal.value = true;
+}
+
+function resetServiceForm() {
+    Object.assign(serviceForm, {
+        name: '',
+        price: 0,
+        duration: '',
+        status: 'active',
+        details: '',
+    });
+}
+
+function closeServiceModal() {
+    showServiceModal.value = false;
+    editingService.value = null;
+}
+
+async function saveService() {
+    const payload = {
+        name: serviceForm.name.trim(),
+        price: Number(serviceForm.price || 0),
+        duration: serviceForm.duration.trim(),
+        status: serviceForm.status,
+        details: serviceForm.details.trim(),
+    };
+
+    if (!payload.name) {
+        notifyError('Renseignez le nom du service.');
+        return;
+    }
+
+    try {
+        const url = editingService.value
+            ? `/api/businesses/${props.businessId}/services/${editingService.value.id}`
+            : `/api/businesses/${props.businessId}/services`;
+        const response = await fetch(url, {
+            method: editingService.value ? 'PUT' : 'POST',
+            headers: requestHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.message || 'Service invalide.');
+        }
+
+        const savedService = await response.json();
+        if (editingService.value) {
+            services.value = services.value.map((service) => service.id === savedService.id ? savedService : service);
+        } else {
+            services.value = [savedService, ...services.value];
+        }
+
+        closeServiceModal();
+        resetServiceForm();
+        notifySuccess('Service enregistré.');
+    } catch (error) {
+        notifyError(error.message);
+    }
+}
+
+async function removeService(service) {
+    try {
+        const response = await fetch(`/api/businesses/${props.businessId}/services/${service.id}/archive`, {
+            method: 'PATCH',
+            headers: requestHeaders(),
+        });
+
+        if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.message || 'Impossible de suspendre le service.');
+        }
+
+        const savedService = await response.json();
+        services.value = services.value.map((item) => item.id === savedService.id ? savedService : item);
+        notifySuccess('Service suspendu.');
+    } catch (error) {
+        notifyError(error.message);
+    }
+}
+
+function selectedServiceForLine(line) {
+    return services.value.find((service) => Number(service.id) === Number(line.service_id)) || null;
+}
+
+function selectableServicesForLine(line) {
+    const selectedIds = new Set(
+        serviceSaleLines.value
+            .filter((item) => item.key !== line.key && item.service_id)
+            .map((item) => Number(item.service_id)),
+    );
+
+    return activeServices.value.filter((service) => {
+        const serviceId = Number(service.id);
+        return serviceId === Number(line.service_id) || !selectedIds.has(serviceId);
+    });
+}
+
+function serviceLineTotal(line) {
+    return Math.max(0, Number(line.quantity || 0) * Number(line.unit_price || 0));
+}
+
+function syncServiceLinePrice(line) {
+    line.unit_price = Number(selectedServiceForLine(line)?.price || 0);
+}
+
+function addServiceSaleLine() {
+    serviceSaleLines.value.push(createServiceSaleLine());
+}
+
+function removeServiceSaleLine(index) {
+    if (serviceSaleLines.value.length === 1) {
+        serviceSaleLines.value = [createServiceSaleLine()];
+        return;
+    }
+
+    serviceSaleLines.value.splice(index, 1);
+}
+
+function validateServiceSaleDraft() {
+    const errors = [];
+
+    if (!String(serviceSaleForm.customer_name || '').trim()) {
+        errors.push('Nom du client : champ obligatoire.');
+    }
+
+    serviceSaleLines.value.forEach((line, index) => {
+        const lineLabel = `Ligne ${index + 1}`;
+        const service = selectedServiceForLine(line);
+
+        if (!service) {
+            errors.push(`${lineLabel} - Service : champ obligatoire.`);
+        }
+
+        if (!Number(line.quantity || 0) || Number(line.quantity || 0) <= 0) {
+            errors.push(`${lineLabel} - Quantité : indiquez une quantité valide.`);
+        }
+
+        if (line.unit_price === '' || line.unit_price === null || Number.isNaN(Number(line.unit_price))) {
+            errors.push(`${lineLabel} - Prix unitaire : champ obligatoire.`);
+        } else if (Number(line.unit_price || 0) < 0) {
+            errors.push(`${lineLabel} - Prix unitaire : indiquez un prix valide.`);
+        }
+    });
+
+    if (!serviceSaleCart.value.length) {
+        errors.push('Services : ajoutez au moins un service valide.');
+    }
+
+    if (serviceSaleForm.payment_method === 'credit' && !serviceSaleForm.credit_due_date) {
+        errors.push('Échéance crédit : champ obligatoire.');
+    }
+
+    if (errors.length) {
+        const error = new Error('Impossible de valider : des informations manquent.');
+        error.fields = errors;
+        throw error;
+    }
+}
+
+function openServiceSaleConfirmModal() {
+    try {
+        validateServiceSaleDraft();
+        showServiceSaleConfirmModal.value = true;
+    } catch (error) {
+        showSaleValidationError(error);
+    }
+}
+
+function closeServiceSaleConfirmModal() {
+    showServiceSaleConfirmModal.value = false;
+}
+
+async function saveServiceSale() {
+    savingServiceSale.value = true;
+
+    try {
+        validateServiceSaleDraft();
+
+        const response = await fetch(`/api/businesses/${props.businessId}/sales`, {
+            method: 'POST',
+            headers: requestHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({
+                customer_id: serviceSaleForm.customer_id,
+                customer_name: serviceSaleForm.customer_name,
+                customer_phone: serviceSaleForm.customer_phone,
+                payment_method: serviceSaleForm.payment_method,
+                type: 'invoice',
+                credit_due_date: serviceSaleForm.payment_method === 'credit' ? serviceSaleForm.credit_due_date : '',
+                items: serviceSaleCart.value.map((item) => ({
+                    service_id: item.service_id,
+                    quantity: item.quantity,
+                    unit_price: item.unit_price,
+                    discount: 0,
+                })),
+            }),
+        });
+
+        if (!response.ok) {
+            const data = await response.json();
+            throw apiValidationError(data, 'Vente service invalide.');
+        }
+
+        const createdSale = await response.json();
+        completedSale.value = createdSale;
+        completedSaleWhatsappPhone.value = createdSale.customer?.phone || serviceSaleForm.customer_phone || '';
+        Object.assign(serviceSaleForm, {
+            customer_id: '',
+            customer_name: '',
+            customer_phone: '',
+            payment_method: 'cash',
+            credit_due_date: '',
+        });
+        serviceSaleLines.value = [createServiceSaleLine()];
+        serviceCustomerSearch.value = '';
+        showServiceSaleConfirmModal.value = false;
+        showSaleCompletedModal.value = true;
+        notifySuccess('Facture service enregistrée avec succès.');
+        await loadDashboard();
+    } catch (error) {
+        if (Array.isArray(error.fields) && error.fields.length) {
+            showSaleValidationError(error);
+        } else {
+            notifyError(error.message);
+        }
+    } finally {
+        savingServiceSale.value = false;
+    }
+}
+
+function onProductCategoryChange() {
+    if (form.category_name !== '__new__') {
+        return;
+    }
+
+    form.category_name = '';
+    openCategoryModal(null, 'product');
+}
+
+function openCategoryModal(category = null, source = 'categories') {
+    editingCategory.value = category;
+    categoryModalSource.value = source;
+    Object.assign(categoryForm, {
+        name: category?.name || '',
+    });
+    showCategoryModal.value = true;
+}
+
+function closeCategoryModal() {
+    showCategoryModal.value = false;
+    editingCategory.value = null;
+    categoryModalSource.value = 'categories';
+}
+
+async function saveCategory() {
+    savingCategory.value = true;
+    message.value = '';
+
+    try {
+        const url = editingCategory.value
+            ? `/api/businesses/${props.businessId}/categories/${editingCategory.value.id}`
+            : `/api/businesses/${props.businessId}/categories`;
+        const response = await fetch(url, {
+            method: editingCategory.value ? 'PUT' : 'POST',
+            headers: requestHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify(categoryForm),
+        });
+
+        if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.message || 'Catégorie invalide.');
+        }
+
+        const savedCategory = await response.json();
+        if (!editingCategory.value && categoryModalSource.value === 'product') {
+            form.category_name = savedCategory.name;
+        }
+
+        message.value = editingCategory.value ? 'Catégorie modifiée.' : 'Catégorie ajoutée.';
+        notifySuccess(message.value);
+        closeCategoryModal();
+        await loadDashboard();
+    } catch (error) {
+        message.value = error.message;
+        notifyError(message.value);
+    } finally {
+        savingCategory.value = false;
+    }
+}
+
+async function archiveCategory(category) {
+    if (!category?.id) {
+        return;
+    }
+
+    const confirmed = window.confirm(`Archiver la catégorie "${category.name}" ? Les produits liés passeront en Non classé.`);
+
+    if (!confirmed) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/businesses/${props.businessId}/categories/${category.id}/archive`, {
+            method: 'PATCH',
+            headers: requestHeaders({ 'Content-Type': 'application/json' }),
+        });
+
+        if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.message || 'Archivage impossible.');
+        }
+
+        notifySuccess('Catégorie archivée.');
+        await loadDashboard();
+    } catch (error) {
+        notifyError(error.message);
+    }
+}
+
+function openStockMovementModal(product, mode) {
+    stockMovementProduct.value = product;
+    stockMovementMode.value = mode;
+    Object.assign(stockMovementForm, {
+        quantity: '',
+        notes: '',
+    });
+    showStockMovementModal.value = true;
+}
+
+function closeStockMovementModal() {
+    showStockMovementModal.value = false;
+    stockMovementProduct.value = null;
+}
+
+async function saveStockMovement() {
+    if (!stockMovementProduct.value) {
+        return;
+    }
+
+    savingStockMovement.value = true;
+    message.value = '';
+
+    try {
+        const response = await fetch(`/api/businesses/${props.businessId}/products/${stockMovementProduct.value.id}/stock-movements`, {
+            method: 'POST',
+            headers: requestHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({
+                type: stockMovementMode.value === 'add' ? 'in' : 'out',
+                quantity: stockMovementForm.quantity,
+                reason: stockMovementMode.value === 'add' ? 'Ajout de stock' : 'Retrait de stock',
+                notes: stockMovementForm.notes,
+            }),
+        });
+
+        if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.message || 'Mouvement de stock invalide.');
+        }
+
+        message.value = stockMovementMode.value === 'add' ? 'Stock ajouté au produit.' : 'Stock retiré du produit.';
+        notifySuccess(message.value);
+        closeStockMovementModal();
+        await loadDashboard();
+    } catch (error) {
+        message.value = error.message;
+        notifyError(message.value);
+    } finally {
+        savingStockMovement.value = false;
+    }
+}
+
+function openProductDetails(product) {
+    selectedProductDetails.value = product;
+    showProductDetailsModal.value = true;
+}
+
+function closeProductDetails() {
+    showProductDetailsModal.value = false;
+    selectedProductDetails.value = null;
+}
+
+async function openStockHistoryModal(product) {
+    stockHistoryProduct.value = product;
+    stockHistoryMovements.value = [];
+    showStockHistoryModal.value = true;
+    loadingStockHistory.value = true;
+
+    try {
+        const response = await fetch(`/api/businesses/${props.businessId}/products/${product.id}/stock-movements`, {
+            headers: requestHeaders(),
+        });
+
+        if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.message || 'Historique indisponible.');
+        }
+
+        const data = await response.json();
+        stockHistoryProduct.value = data.product || product;
+        stockHistoryMovements.value = data.movements || [];
+    } catch (error) {
+        notifyError(error.message);
+    } finally {
+        loadingStockHistory.value = false;
+    }
+}
+
+function closeStockHistoryModal() {
+    showStockHistoryModal.value = false;
+    stockHistoryProduct.value = null;
+    stockHistoryMovements.value = [];
+}
+
+async function archiveProduct(product) {
+    const confirmed = window.confirm(`Archiver le produit "${product.name}" ? Il ne sera plus affiché dans les listes actives.`);
+
+    if (!confirmed) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/businesses/${props.businessId}/products/${product.id}/archive`, {
+            method: 'PATCH',
+            headers: requestHeaders({ 'Content-Type': 'application/json' }),
+        });
+
+        if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.message || 'Archivage impossible.');
+        }
+
+        notifySuccess('Produit archivé.');
+        if (selectedProductDetails.value?.id === product.id) {
+            closeProductDetails();
+        }
+        await loadDashboard();
+    } catch (error) {
+        notifyError(error.message);
+    }
+}
+
+function printProductDetails() {
+    const product = selectedProductDetails.value;
+
+    if (!product) {
+        return;
+    }
+
+    const printWindow = window.open('', '_blank');
+
+    if (!printWindow) {
+        message.value = 'Impossible d’ouvrir la fenêtre d’impression.';
+        notifyError(message.value);
+        return;
+    }
+
+    const rows = [
+        ['Produit', product.name || '-'],
+        ['Catégorie', product.category?.name || 'Non classé'],
+        ['Note', product.notes || '-'],
+        ['Stock actuel', product.stock_quantity || 0],
+        ["Seuil d'alerte", product.alert_threshold || 0],
+        ['État du stock', isLow(product) ? 'Stock bas' : 'OK'],
+        ["Prix d'achat", formatMoney(product.purchase_price)],
+        ['Prix de vente', formatMoney(product.sale_price)],
+        ["Valeur d'achat du stock", formatMoney(productPurchaseStockValue(product))],
+        ['Valeur de vente estimée', formatMoney(productSaleStockValue(product))],
+        ['Quantité vendue', productSoldQuantity(product)],
+        ['Statut', product.is_active === false ? 'Archivé' : 'Actif'],
+        ['Créé le', formatDateOnly(product.created_at)],
+        ['Dernière mise à jour', formatDateOnly(product.updated_at)],
+    ].map(([label, value]) => `<tr><th>${printEscapeHtml(label)}</th><td>${printEscapeHtml(value)}</td></tr>`).join('');
+
+    writePrintableDocument(
+        printWindow,
+        `Fiche produit - ${product.name || 'Produit'}`,
+        `Stock : ${printEscapeHtml(product.stock_quantity || 0)} - Prix de vente : ${formatMoney(product.sale_price)}`,
+        `<table><tbody>${rows}</tbody></table>`
+    );
+    notifySuccess('Impression de la fiche lancée.');
+}
+
 function printFilteredProducts() {
+    const columns = selectedProductPrintColumns();
+    if (!columns.length) {
+        message.value = 'Sélectionnez au moins une colonne à imprimer.';
+        notifyError(message.value);
+        return;
+    }
+
     showProductPrintModal.value = false;
-    const rows = filteredProducts.value.map((product) => `<tr><td>${printEscapeHtml(product.name)}</td><td>${printEscapeHtml(product.category?.name || 'Non classé')}</td><td>${printEscapeHtml(product.unit || '-')}</td><td>${printEscapeHtml(product.stock_quantity)}</td><td>${printEscapeHtml(product.alert_threshold)}</td><td>${formatMoney(product.purchase_price)}</td><td>${formatMoney(product.sale_price)}</td><td>${printEscapeHtml(isLow(product) ? 'Stock bas' : 'OK')}</td></tr>`).join('')
-        || '<tr><td colspan="8">Aucun produit affiché.</td></tr>';
+    const header = columns.map((column) => `<th>${printEscapeHtml(column.label)}</th>`).join('');
+    const rows = filteredProducts.value.map((product) => `<tr>${columns.map((column) => `<td>${printEscapeHtml(productPrintColumnValue(product, column.key))}</td>`).join('')}</tr>`).join('')
+        || `<tr><td colspan="${columns.length}">Aucun produit affiché.</td></tr>`;
     const printWindow = window.open('', '_blank');
 
     if (!printWindow) {
@@ -4964,9 +7839,63 @@ function printFilteredProducts() {
     writePrintableDocument(
         printWindow,
         'Stocks affichés',
-        `Valeur du stock : ${formatMoney(filteredProductsStockValue.value)}`,
+        printSummary([
+            productFilters.search.trim(),
+            printFilterSummary('Catégorie', productFilters.category),
+            printFilterSummary('Statut', productFilters.status === 'low' ? 'Stock faible' : productFilters.status === 'ok' ? 'Stock correct' : ''),
+            `${filteredProducts.value.length} produit${filteredProducts.value.length >= 2 ? 's' : ''}`,
+            `Valeur du stock : ${formatMoney(filteredProductsStockValue.value)}`,
+        ]),
         `<table>
-            <thead><tr><th>Produit</th><th>Catégorie</th><th>Unité</th><th>Stock</th><th>Seuil</th><th>Prix achat</th><th>Prix vente</th><th>État</th></tr></thead>
+            <thead><tr>${header}</tr></thead>
+            <tbody>${rows}</tbody>
+        </table>`
+    );
+    notifySuccess('Impression PDF lancée.');
+}
+
+function printFilteredStockMovements() {
+    const rows = filteredStockMovements.value.map((movement) => `
+        <tr>
+            <td>${printEscapeHtml(formatDate(movement.moved_at))}</td>
+            <td>${printEscapeHtml(movement.product?.name || 'Produit supprimé')}</td>
+            <td>${printEscapeHtml(stockMovementTypeLabel(movement))}</td>
+            <td>${printEscapeHtml(formatStockQuantity(Math.abs(Number(movement.quantity || 0))))}</td>
+            <td>${printEscapeHtml(movement.reason || '-')}</td>
+            <td>${printEscapeHtml(stockMovementUserDisplay(movement))}</td>
+            <td>${printEscapeHtml(movement.notes || '-')}</td>
+        </tr>
+    `).join('') || '<tr><td colspan="7">Aucun mouvement affiché.</td></tr>';
+    const printWindow = window.open('', '_blank');
+
+    if (!printWindow) {
+        message.value = 'Impossible d’ouvrir la fenêtre d’impression.';
+        notifyError(message.value);
+        return;
+    }
+
+    writePrintableDocument(
+        printWindow,
+        'Historique des stocks',
+        printSummary([
+            stockMovementPrintPeriodLabel.value,
+            printSearchSummary(stockMovementFilters.search),
+            printFilterSummary('Type', stockMovementFilters.type ? stockMovementTypeLabel({ type: stockMovementFilters.type }) : ''),
+            stockMovementsCountLabel.value,
+            `Total quantités : ${stockMovementsQuantityLabel.value}`,
+        ]),
+        `<table>
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Produit</th>
+                    <th>Type</th>
+                    <th>Quantité</th>
+                    <th>Motif</th>
+                    <th>Utilisateur</th>
+                    <th>Note</th>
+                </tr>
+            </thead>
             <tbody>${rows}</tbody>
         </table>`
     );
@@ -4974,14 +7903,22 @@ function printFilteredProducts() {
 }
 
 function exportFilteredProductsExcel() {
+    const columns = selectedProductPrintColumns();
+    if (!columns.length) {
+        message.value = 'Sélectionnez au moins une colonne à exporter.';
+        notifyError(message.value);
+        return;
+    }
+
     showProductPrintModal.value = false;
-    const rows = filteredProducts.value.map((product) => `<tr><td>${printEscapeHtml(product.name)}</td><td>${printEscapeHtml(product.category?.name || 'Non classé')}</td><td>${printEscapeHtml(product.unit || '-')}</td><td>${printEscapeHtml(product.stock_quantity)}</td><td>${printEscapeHtml(product.alert_threshold)}</td><td>${formatMoney(product.purchase_price)}</td><td>${formatMoney(product.sale_price)}</td><td>${printEscapeHtml(isLow(product) ? 'Stock bas' : 'OK')}</td></tr>`).join('')
-        || '<tr><td colspan="8">Aucun produit affiché.</td></tr>';
+    const header = columns.map((column) => `<th>${printEscapeHtml(column.label)}</th>`).join('');
+    const rows = filteredProducts.value.map((product) => `<tr>${columns.map((column) => `<td>${printEscapeHtml(productPrintColumnValue(product, column.key))}</td>`).join('')}</tr>`).join('')
+        || `<tr><td colspan="${columns.length}">Aucun produit affiché.</td></tr>`;
     const html = `
         <table>
-            <thead><tr><th>Produit</th><th>Catégorie</th><th>Unité</th><th>Stock</th><th>Seuil</th><th>Prix achat</th><th>Prix vente</th><th>État</th></tr></thead>
+            <thead><tr>${header}</tr></thead>
             <tbody>${rows}</tbody>
-            <tfoot><tr><td colspan="5">Valeur du stock</td><td colspan="3">${formatMoney(filteredProductsStockValue.value)}</td></tr></tfoot>
+            <tfoot><tr><td colspan="${columns.length}">Valeur du stock : ${formatMoney(filteredProductsStockValue.value)}</td></tr></tfoot>
         </table>
     `;
     const blob = new Blob([`\uFEFF${html}`], { type: 'application/vnd.ms-excel;charset=utf-8;' });
@@ -4993,39 +7930,345 @@ function exportFilteredProductsExcel() {
     notifySuccess('Export Excel généré.');
 }
 
-function addSaleLine() {
-    const product = products.value.find((item) => item.id === Number(saleLine.product_id));
+function selectedProductPrintColumns() {
+    return productPrintColumns.filter((column) => selectedProductPrintColumnKeys.value.includes(column.key));
+}
+
+function productPrintColumnValue(product, key) {
+    return {
+        name: product.name || '-',
+        category: product.category?.name || 'Non classé',
+        notes: product.notes || '-',
+        quantity: product.stock_quantity ?? 0,
+        alert_threshold: product.alert_threshold ?? 0,
+        purchase_price: formatMoney(product.purchase_price || 0),
+        sale_price: formatMoney(product.sale_price || 0),
+        stock_purchase_value: formatMoney(productPurchaseStockValue(product)),
+        stock_sale_value: formatMoney(productSaleStockValue(product)),
+        sold_quantity: productSoldQuantity(product),
+        status: isLow(product) ? 'Stock bas' : 'OK',
+    }[key] ?? '-';
+}
+
+function productSaleOptionLabel(product) {
+    return `${product.name} - ${formatMoney(product.sale_price)} (${formatStockQuantity(product.stock_quantity)} restant)`;
+}
+
+function formatStockQuantity(value) {
+    const number = Number(value || 0);
+    return Number.isInteger(number) ? String(number) : number.toLocaleString('fr-FR', { maximumFractionDigits: 2 });
+}
+
+function customerSaleOptionLabel(customer) {
+    return [customer.name, formatPhoneDisplay(customer.phone)].filter(Boolean).join(' - ');
+}
+
+function availableProductsForSaleLine(index) {
+    const selectedIds = saleLines.value
+        .map((line, lineIndex) => lineIndex === index ? null : Number(line.product_id))
+        .filter(Boolean);
+
+    return saleSelectableProducts.value
+        .filter((product) => !selectedIds.includes(Number(product.id)))
+        .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'fr'));
+}
+
+function filteredSaleLineProducts(index) {
+    const line = saleLines.value[index];
+    const term = String(line?.product_search || '').trim().toLowerCase();
+    const rows = availableProductsForSaleLine(index);
+
+    return (term
+        ? rows.filter((product) => productSaleOptionLabel(product).toLowerCase().includes(term))
+        : rows).slice(0, 10);
+}
+
+function saleLineProduct(line) {
+    return products.value.find((item) => item.id === Number(line.product_id));
+}
+
+function saleLineUnitPrice(line) {
+    if (currentUser.value?.can_edit_prices && line.unit_price !== '') {
+        return Number(line.unit_price || 0);
+    }
+
+    return Number(saleLineProduct(line)?.sale_price || 0);
+}
+
+function saleLineTotal(line) {
+    return Number(line.quantity || 0) * saleLineUnitPrice(line);
+}
+
+function syncSaleLineProductFromSearch(index) {
+    const line = saleLines.value[index];
+
+    if (!line) {
+        return;
+    }
+
+    const term = line.product_search.trim().toLowerCase();
+    const product = availableProductsForSaleLine(index).find((item) => {
+        const label = productSaleOptionLabel(item).toLowerCase();
+        return label === term || String(item.name || '').toLowerCase() === term;
+    });
+
+    line.product_id = product ? product.id : '';
+    if (product && line.unit_price === '') {
+        line.unit_price = Number(product.sale_price || 0);
+    }
+    line.show_suggestions = !product;
+}
+
+function selectSaleLineProduct(index, product) {
+    const line = saleLines.value[index];
+
+    if (!line) {
+        return;
+    }
+
+    line.product_search = productSaleOptionLabel(product);
+    line.product_id = product.id;
+    line.unit_price = Number(product.sale_price || 0);
+    line.show_suggestions = false;
+    line.stock_warning_shown = false;
+    validateSaleLineQuantity(line);
+}
+
+function hideSaleLineProductSuggestions(index) {
+    window.setTimeout(() => {
+        const line = saleLines.value[index];
+
+        if (line) {
+            line.show_suggestions = false;
+        }
+    }, 120);
+}
+
+function validateSaleLineQuantity(line) {
+    const product = saleLineProduct(line);
 
     if (!product) {
-        saleMessage.value = 'Sélectionnez un produit.';
-        notifyError(saleMessage.value);
+        line.stock_warning_shown = false;
         return;
     }
 
-    if (Number(saleLine.quantity) > Number(product.stock_quantity)) {
-        saleMessage.value = `Stock insuffisant pour ${product.name}.`;
-        notifyError(saleMessage.value);
+    if (saleDraftIsProforma.value) {
+        line.stock_warning_shown = false;
         return;
     }
 
-    const subtotal = Number(saleLine.quantity) * Number(product.sale_price);
-    const discount = Number(saleLine.discount || 0);
+    const stockQuantity = Number(product.stock_quantity || 0);
+    const requestedQuantity = Number(line.quantity || 0);
 
-    cart.value.push({
-        product_id: product.id,
-        product_name: product.name,
-        quantity: Number(saleLine.quantity),
-        unit_price: Number(product.sale_price),
-        discount,
-        total: Math.max(0, subtotal - discount),
+    if (requestedQuantity > stockQuantity) {
+        if (!line.stock_warning_shown) {
+            notifyError(`Stock insuffisant pour ${product.name}. Stock restant : ${formatStockQuantity(stockQuantity)}.`);
+            line.stock_warning_shown = true;
+        }
+        return;
+    }
+
+    line.stock_warning_shown = false;
+}
+
+function ensureSaleLineCustomPrice(line) {
+    if (line.unit_price === '') {
+        line.unit_price = saleLineUnitPrice(line);
+    }
+}
+
+function showPriceEditDenied() {
+    notifyError("L'administrateur ne vous a pas donné l'autorisation de modifier les prix.");
+}
+
+function syncSaleCustomerFromSearch() {
+    const typedValue = customerSearch.value.trim();
+    const term = typedValue.toLowerCase();
+    const customer = customers.value.find((item) => {
+        const label = customerSaleOptionLabel(item).toLowerCase();
+        return label === term || String(item.name || '').toLowerCase() === term;
     });
 
-    Object.assign(saleLine, {
-        product_id: '',
-        quantity: 1,
-        discount: '',
+    saleForm.customer_id = customer?.id || '';
+    saleForm.customer_name = customer ? customer.name : typedValue;
+    saleForm.customer_phone = customer?.phone || '';
+    showCustomerSuggestions.value = true;
+}
+
+function selectSaleCustomer(customer) {
+    customerSearch.value = customerSaleOptionLabel(customer);
+    saleForm.customer_id = customer.id || '';
+    saleForm.customer_name = customer.name || '';
+    saleForm.customer_phone = customer.phone || '';
+    showCustomerSuggestions.value = false;
+}
+
+function hideSaleCustomerSuggestions() {
+    window.setTimeout(() => {
+        showCustomerSuggestions.value = false;
+    }, 120);
+}
+
+function syncServiceSaleCustomerFromSearch() {
+    const typedValue = serviceCustomerSearch.value.trim();
+    const term = typedValue.toLowerCase();
+    const customer = customers.value.find((item) => {
+        const label = customerSaleOptionLabel(item).toLowerCase();
+        return label === term || String(item.name || '').toLowerCase() === term;
     });
+
+    serviceSaleForm.customer_id = customer?.id || '';
+    serviceSaleForm.customer_name = customer ? customer.name : typedValue;
+    serviceSaleForm.customer_phone = customer?.phone || '';
+    showServiceCustomerSuggestions.value = true;
+}
+
+function selectServiceSaleCustomer(customer) {
+    serviceCustomerSearch.value = customerSaleOptionLabel(customer);
+    serviceSaleForm.customer_id = customer.id || '';
+    serviceSaleForm.customer_name = customer.name || '';
+    serviceSaleForm.customer_phone = customer.phone || '';
+    showServiceCustomerSuggestions.value = false;
+}
+
+function hideServiceSaleCustomerSuggestions() {
+    window.setTimeout(() => {
+        showServiceCustomerSuggestions.value = false;
+    }, 120);
+}
+
+function addSaleDraftLine() {
+    saleLines.value.forEach((line, index) => syncSaleLineProductFromSearch(index));
+    saleLines.value.push(createSaleLine());
+}
+
+function removeSaleDraftLine(index) {
+    if (saleLines.value.length === 1) {
+        saleLines.value = [createSaleLine()];
+        return;
+    }
+
+    saleLines.value.splice(index, 1);
+}
+
+function validateSaleDraft() {
+    if (saleForm.type === 'proforma') {
+        saleForm.payment_method = 'cash';
+        saleForm.credit_due_date = '';
+    }
+
+    saleLines.value.forEach((line, index) => syncSaleLineProductFromSearch(index));
+
+    const errors = [];
+
+    if (!String(saleForm.customer_name || '').trim()) {
+        errors.push('Nom du client : champ obligatoire.');
+    }
+
+    saleLines.value.forEach((line, index) => {
+        const product = products.value.find((item) => item.id === Number(line.product_id));
+        const quantity = Number(line.quantity || 0);
+        const lineLabel = `Ligne ${index + 1}`;
+
+        if (!product) {
+            errors.push(`${lineLabel} - Produit : champ obligatoire.`);
+        }
+
+        if (!quantity || quantity <= 0) {
+            errors.push(`${lineLabel} - Quantité : indiquez une quantité valide.`);
+        }
+
+        if (currentUser.value?.can_edit_prices && line.unit_price !== '' && Number(line.unit_price) < 0) {
+            errors.push(`${lineLabel} - Prix unitaire : indiquez un prix valide.`);
+        }
+    });
+
+    if (saleForm.type === 'invoice' && saleForm.payment_method === 'credit' && !saleForm.credit_due_date) {
+        errors.push('Échéance crédit : champ obligatoire.');
+    }
+
+    if (!cart.value.length) {
+        errors.push('Panier : ajoutez au moins un produit valide.');
+    }
+
+    if (saleForm.type === 'invoice') {
+        const insufficientItem = cart.value.find((item) => {
+            const product = products.value.find((row) => row.id === Number(item.product_id));
+            return product && Number(item.quantity) > Number(product.stock_quantity);
+        });
+
+        if (insufficientItem) {
+            errors.push(`Stock : quantité insuffisante pour ${insufficientItem.product_name}.`);
+        }
+    }
+
+    if (errors.length) {
+        const error = new Error('Impossible de valider : des informations manquent.');
+        error.fields = [...new Set(errors)];
+        throw error;
+    }
+}
+
+function showSaleValidationError(error) {
+    saleValidationErrors.value = Array.isArray(error.fields) && error.fields.length
+        ? error.fields
+        : [error.message || 'Vérifiez les informations de la facture.'];
+    showSaleValidationModal.value = true;
+    notifyError(error.message || 'Facture incomplète.');
+}
+
+function apiValidationError(data, fallbackMessage) {
+    const error = new Error(data?.message || fallbackMessage);
+    const fields = [];
+    const fieldLabels = {
+        customer_id: 'Client',
+        customer_name: 'Nom du client',
+        customer_phone: 'Téléphone client',
+        payment_method: 'Mode de paiement',
+        credit_due_date: 'Échéance crédit',
+        type: 'Type de document',
+        items: 'Lignes de vente',
+        product_id: 'Produit',
+        service_id: 'Service',
+        quantity: 'Quantité',
+        unit_price: 'Prix unitaire',
+        discount: 'Remise',
+    };
+
+    Object.entries(data?.errors || {}).forEach(([field, messages]) => {
+        const parts = field.split('.');
+        const lastPart = parts[parts.length - 1];
+        const lineNumber = parts[0] === 'items' && /^\d+$/.test(parts[1] || '') ? `Ligne ${Number(parts[1]) + 1} - ` : '';
+        const label = fieldLabels[lastPart] || fieldLabels[field] || field;
+        const message = Array.isArray(messages) ? messages[0] : messages;
+        fields.push(`${lineNumber}${label} : ${message || 'champ invalide.'}`);
+    });
+
+    if (fields.length) {
+        error.fields = fields;
+    }
+
+    return error;
+}
+
+function closeSaleValidationModal() {
+    showSaleValidationModal.value = false;
+}
+
+function openSaleConfirmModal() {
     saleMessage.value = '';
+
+    try {
+        validateSaleDraft();
+        showSaleConfirmModal.value = true;
+    } catch (error) {
+        saleMessage.value = error.message;
+        showSaleValidationError(error);
+    }
+}
+
+function closeSaleConfirmModal() {
+    showSaleConfirmModal.value = false;
 }
 
 async function saveSale() {
@@ -5033,12 +8276,7 @@ async function saveSale() {
     saleMessage.value = '';
 
     try {
-        if (activeSection.value === 'seller-cashier') {
-            saleForm.type = 'invoice';
-        }
-        if (activeSection.value === 'seller-proforma') {
-            saleForm.type = 'proforma';
-        }
+        validateSaleDraft();
 
         const documentType = saleForm.type;
         const response = await fetch(`/api/businesses/${props.businessId}/sales`, {
@@ -5049,6 +8287,7 @@ async function saveSale() {
                 items: cart.value.map((item) => ({
                     product_id: item.product_id,
                     quantity: item.quantity,
+                    unit_price: item.unit_price,
                     discount: item.discount,
                 })),
             }),
@@ -5056,26 +8295,89 @@ async function saveSale() {
 
         if (!response.ok) {
             const data = await response.json();
-            throw new Error(data.message || 'Vente invalide.');
+            throw apiValidationError(data, 'Vente invalide.');
         }
 
-        cart.value = [];
+        const createdSale = await response.json();
+        completedSale.value = createdSale;
+        completedSaleWhatsappPhone.value = createdSale.customer?.phone || saleForm.customer_phone || '';
+        saleLines.value = [createSaleLine()];
         Object.assign(saleForm, {
+            customer_id: '',
             customer_name: '',
             customer_phone: '',
             payment_method: 'cash',
             type: 'invoice',
             credit_due_date: '',
         });
+        customerSearch.value = '';
+        showSaleConfirmModal.value = false;
+        showSaleCompletedModal.value = true;
         saleMessage.value = documentType === 'proforma' ? 'Facture pro forma enregistrée avec succès.' : 'Facture enregistrée avec succès.';
         notifySuccess(saleMessage.value);
         await loadDashboard();
     } catch (error) {
         saleMessage.value = error.message;
-        notifyError(saleMessage.value);
+        if (Array.isArray(error.fields) && error.fields.length) {
+            showSaleValidationError(error);
+        } else {
+            notifyError(saleMessage.value);
+        }
     } finally {
         savingSale.value = false;
     }
+}
+
+function completedSaleInvoiceUrl() {
+    return completedSale.value?.id
+        ? `/businesses/${props.businessId}/sales/${completedSale.value.id}/invoice`
+        : '';
+}
+
+function completedSalePublicInvoiceUrl() {
+    return completedSale.value?.public_invoice_url || completedSaleInvoiceUrl();
+}
+
+function receivableInvoiceUrl(receivable) {
+    return receivable?.invoice?.id
+        ? `/businesses/${props.businessId}/sales/${receivable.invoice.id}/invoice`
+        : '';
+}
+
+function printCompletedSale() {
+    const url = completedSaleInvoiceUrl();
+
+    if (url) {
+        window.open(url, '_blank', 'noopener');
+    }
+}
+
+function openSaleWhatsappModal() {
+    completedSaleWhatsappPhone.value = completedSaleWhatsappPhone.value || completedSale.value?.customer?.phone || '';
+    showSaleWhatsappModal.value = true;
+}
+
+function sendCompletedSaleWhatsapp() {
+    const phone = normalizeWhatsappPhone(completedSaleWhatsappPhone.value);
+
+    if (!phone) {
+        notifyError('Renseignez un numéro WhatsApp valide.');
+        return;
+    }
+
+    const publicUrl = completedSalePublicInvoiceUrl();
+    const invoiceUrl = publicUrl.startsWith('http') ? publicUrl : `${window.location.origin}${publicUrl}`;
+    const documentLabel = completedSale.value?.type === 'proforma' ? 'facture pro forma' : 'facture';
+    const message = `Bonjour, votre ${documentLabel} ${completedSale.value?.number || ''} d'un montant de ${formatMoney(completedSale.value?.total || 0)} est prête. Cliquez ici pour télécharger votre ${documentLabel} : ${invoiceUrl}`;
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank', 'noopener');
+    showSaleWhatsappModal.value = false;
+}
+
+function continueNewSale() {
+    showSaleCompletedModal.value = false;
+    showSaleWhatsappModal.value = false;
+    completedSale.value = null;
+    completedSaleWhatsappPhone.value = '';
 }
 
 function openSalesDateFilter() {
@@ -5116,6 +8418,51 @@ function clearSalesDateFilter() {
     showSalesDateModal.value = false;
 }
 
+function openSaleCancelModal(sale) {
+    saleToCancel.value = sale;
+    saleCancelForm.reason = '';
+    saleCancelMessage.value = '';
+    showSaleCancelModal.value = true;
+}
+
+function closeSaleCancelModal() {
+    showSaleCancelModal.value = false;
+    saleToCancel.value = null;
+    saleCancelForm.reason = '';
+}
+
+async function cancelSale() {
+    if (!saleToCancel.value?.id) {
+        return;
+    }
+
+    savingSaleCancel.value = true;
+    saleCancelMessage.value = '';
+
+    try {
+        const response = await fetch(`/api/businesses/${props.businessId}/sales/${saleToCancel.value.id}/cancel`, {
+            method: 'POST',
+            headers: requestHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify(saleCancelForm),
+        });
+
+        if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.message || 'Annulation impossible.');
+        }
+
+        saleCancelMessage.value = 'Commande annulée et stock réajusté.';
+        notifySuccess(saleCancelMessage.value);
+        closeSaleCancelModal();
+        await loadDashboard();
+    } catch (error) {
+        saleCancelMessage.value = error.message;
+        notifyError(saleCancelMessage.value);
+    } finally {
+        savingSaleCancel.value = false;
+    }
+}
+
 function chooseSalesPrint(format) {
     showSalesPrintModal.value = false;
     if (format === 'excel') {
@@ -5129,10 +8476,10 @@ function chooseSalesPrint(format) {
 function salesRowsForExport() {
     return displayedSalesRows.value.map((sale) => ({
         number: sale.number || '',
-        seller: sale.seller?.name || 'Vendeur',
+        seller: sellerDisplayName(sale.seller),
         client: sale.customer?.name || 'Client comptoir',
         payment: paymentLabel(sale.payment_method),
-        status: sale.status || '',
+        status: saleStatusLabel(sale.status),
         total: Number(sale.total || 0),
         date: formatDate(sale.sold_at),
         lines: sale.items?.length || 0,
@@ -5176,7 +8523,13 @@ function printFilteredSales() {
     writePrintableDocument(
         printWindow,
         salesView.value === 'proformas' ? 'Factures Pro forma affichées' : 'Ventes affichées',
-        `Total : ${formatMoney(salesView.value === 'proformas' ? filteredProformasTotal.value : filteredSalesTotal.value)}`,
+        printSummary([
+            printDateFilterSummary(salesFilters),
+            printSearchSummary(salesFilters.search),
+            salesView.value === 'proformas' ? '' : printFilterSummary('Paiement', salesFilters.payment ? paymentLabel(salesFilters.payment) : ''),
+            `${rows.length} document${rows.length >= 2 ? 's' : ''}`,
+            `Total : ${formatMoney(salesView.value === 'proformas' ? filteredProformasTotal.value : filteredSalesTotal.value)}`,
+        ]),
         `<table>
             <thead><tr><th>Facture</th><th>Vendeur</th><th>Client</th><th>Paiement</th><th>Statut</th><th>Total</th><th>Date</th><th>Lignes</th></tr></thead>
             <tbody>${printableRows}</tbody>
@@ -5297,10 +8650,15 @@ function openReceivableCreateModal() {
     showReceivableCreateModal.value = true;
 }
 
-function openCustomerCreateModal() {
+function openCustomerCreateModal(prefillName = '', source = 'customers') {
+    if (prefillName instanceof Event) {
+        prefillName = '';
+    }
+
     receivableMessage.value = '';
+    customerCreateSource.value = source;
     Object.assign(customerForm, {
-        name: '',
+        name: String(prefillName || '').trim(),
         phone: '',
     });
     showCustomerCreateModal.value = true;
@@ -5350,10 +8708,55 @@ async function saveCustomer() {
             throw new Error(data.message || 'Client invalide.');
         }
 
+        const createdCustomer = await response.json();
         receivableMessage.value = 'Client enregistré.';
         notifySuccess(receivableMessage.value);
         showCustomerCreateModal.value = false;
-        customerView.value = 'clients';
+        if (customerCreateSource.value === 'sale') {
+            customerSearch.value = customerSaleOptionLabel(createdCustomer);
+            saleForm.customer_id = createdCustomer.id || '';
+            saleForm.customer_name = createdCustomer.name || '';
+            saleForm.customer_phone = createdCustomer.phone || '';
+        } else if (customerCreateSource.value === 'service-sale') {
+            serviceCustomerSearch.value = customerSaleOptionLabel(createdCustomer);
+            serviceSaleForm.customer_id = createdCustomer.id || '';
+            serviceSaleForm.customer_name = createdCustomer.name || '';
+            serviceSaleForm.customer_phone = createdCustomer.phone || '';
+        } else {
+            customerView.value = 'clients';
+        }
+        await loadDashboard();
+    } catch (error) {
+        receivableMessage.value = error.message;
+        notifyError(receivableMessage.value);
+    } finally {
+        savingCustomer.value = false;
+    }
+}
+
+async function updateCustomerPhone() {
+    if (!editingCustomer.value?.id) {
+        return;
+    }
+
+    savingCustomer.value = true;
+    receivableMessage.value = '';
+
+    try {
+        const response = await fetch(`/api/businesses/${props.businessId}/customers/${editingCustomer.value.id}`, {
+            method: 'PUT',
+            headers: requestHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify(customerPhoneForm),
+        });
+
+        if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.message || 'Téléphone client invalide.');
+        }
+
+        receivableMessage.value = 'Téléphone client modifié.';
+        notifySuccess(receivableMessage.value);
+        closeCustomerPhoneEdit();
         await loadDashboard();
     } catch (error) {
         receivableMessage.value = error.message;
@@ -5422,6 +8825,19 @@ function closeReceivablePaymentEdit() {
     receivablePaymentEditForm.amount = '';
 }
 
+function openCustomerPhoneEdit(customer) {
+    receivableMessage.value = '';
+    editingCustomer.value = customer;
+    customerPhoneForm.phone = customer.phone || '';
+    showCustomerPhoneEditModal.value = true;
+}
+
+function closeCustomerPhoneEdit() {
+    showCustomerPhoneEditModal.value = false;
+    editingCustomer.value = null;
+    customerPhoneForm.phone = '';
+}
+
 function openCustomerDetails(customer) {
     selectedCustomerDetails.value = customer;
     showCustomerDetailsModal.value = true;
@@ -5430,6 +8846,39 @@ function openCustomerDetails(customer) {
 function closeCustomerDetails() {
     showCustomerDetailsModal.value = false;
     selectedCustomerDetails.value = null;
+}
+
+function printCustomerDetails() {
+    const customer = selectedCustomerDetails.value;
+    if (!customer) return;
+
+    const receivableRows = (customer.receivables || []).length
+        ? customer.receivables.map((receivable) => `<tr><td>${printEscapeHtml(formatDateOnly(receivable.due_date))}</td><td>${formatMoney(receivable.amount_due)}</td><td>${formatMoney(receivable.remaining)}</td><td>${printEscapeHtml(receivableStatusLabel(receivable.status))}</td></tr>`).join('')
+        : '<tr><td colspan="4">Aucune créance en cours.</td></tr>';
+    const invoiceRows = (customer.invoices || []).length
+        ? customer.invoices.map((invoice) => `<tr><td>${printEscapeHtml(invoice.number)}</td><td>${formatMoney(invoice.total)}</td><td>${printEscapeHtml(formatDate(invoice.sold_at))}</td><td>${printEscapeHtml(paymentLabel(invoice.payment_method))}</td></tr>`).join('')
+        : '<tr><td colspan="4">Aucune facture récente.</td></tr>';
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    writePrintableDocument(
+        printWindow,
+        `Fiche client - ${customer.name || 'Client'}`,
+        `Téléphone : ${printEscapeHtml(formatPhoneDisplay(customer.phone))} - Achats : ${formatMoney(customer.totalPurchases || 0)} - Créances : ${formatMoney(customer.remainingDebt || 0)}`,
+        `<table>
+            <tbody>
+                <tr><th>Client</th><td>${printEscapeHtml(customer.name || '-')}</td></tr>
+                <tr><th>Téléphone</th><td>${printEscapeHtml(formatPhoneDisplay(customer.phone))}</td></tr>
+                <tr><th>Situation</th><td>${printEscapeHtml(customer.situation || '-')}</td></tr>
+                <tr><th>Nombre de factures</th><td>${printEscapeHtml(customer.invoices?.length || 0)}</td></tr>
+            </tbody>
+        </table>
+        <h2>Créances</h2>
+        <table><thead><tr><th>Échéance</th><th>Initial</th><th>Reste</th><th>Statut</th></tr></thead><tbody>${receivableRows}</tbody></table>
+        <h2>Factures récentes</h2>
+        <table><thead><tr><th>Facture</th><th>Total</th><th>Date</th><th>Paiement</th></tr></thead><tbody>${invoiceRows}</tbody></table>`
+    );
+    notifySuccess('Impression de la fiche client lancée.');
 }
 
 async function deleteReceivable(receivable) {
@@ -5514,7 +8963,6 @@ function receivableRowsForExport() {
         customer: receivable.customer?.name || 'Client',
         phone: receivable.customer?.phone || '',
         amountDue: Number(receivable.amount_due || 0),
-        amountPaid: Number(receivable.amount_paid || 0),
         remaining: Number(receivable.remaining || 0),
         status: receivableStatusLabel(receivable.status),
     }));
@@ -5529,13 +8977,13 @@ function exportFilteredReceivablesExcel() {
         .replaceAll('"', '&quot;')
         .replaceAll("'", '&#039;');
     const bodyRows = rows.length
-        ? rows.map((row) => `<tr><td>${escapeHtml(row.dueDate)}</td><td>${escapeHtml(row.customer)}</td><td>${escapeHtml(row.phone || '-')}</td><td>${row.amountDue}</td><td>${row.amountPaid}</td><td>${row.remaining}</td><td>${escapeHtml(row.status)}</td></tr>`).join('')
-        : '<tr><td colspan="7">Aucune créance affichée.</td></tr>';
+        ? rows.map((row) => `<tr><td>${escapeHtml(row.dueDate)}</td><td>${escapeHtml(row.customer)}</td><td>${escapeHtml(formatPhoneDisplay(row.phone))}</td><td>${row.amountDue}</td><td>${row.remaining}</td><td>${escapeHtml(row.status)}</td></tr>`).join('')
+        : '<tr><td colspan="6">Aucune créance affichée.</td></tr>';
     const html = `
         <table>
-            <thead><tr><th>Échéance</th><th>Client</th><th>Téléphone</th><th>Montant dû</th><th>Payé</th><th>Reste</th><th>Statut</th></tr></thead>
+            <thead><tr><th>Échéance</th><th>Client</th><th>Téléphone</th><th>Montant dû</th><th>Reste</th><th>Statut</th></tr></thead>
             <tbody>${bodyRows}</tbody>
-            <tfoot><tr><td colspan="5">Total restant</td><td>${filteredReceivablesTotal.value}</td><td></td></tr></tfoot>
+            <tfoot><tr><td colspan="4">Total restant</td><td>${filteredReceivablesTotal.value}</td><td></td></tr></tfoot>
         </table>
     `;
     const blob = new Blob([`\uFEFF${html}`], { type: 'application/vnd.ms-excel;charset=utf-8;' });
@@ -5556,8 +9004,8 @@ function printFilteredReceivables() {
         .replaceAll('"', '&quot;')
         .replaceAll("'", '&#039;');
     const printableRows = rows.length
-        ? rows.map((row) => `<tr><td>${escapeHtml(row.dueDate)}</td><td>${escapeHtml(row.customer)}</td><td>${escapeHtml(row.phone || '-')}</td><td>${formatMoney(row.amountDue)}</td><td>${formatMoney(row.amountPaid)}</td><td>${formatMoney(row.remaining)}</td><td>${escapeHtml(row.status)}</td></tr>`).join('')
-        : '<tr><td colspan="7">Aucune créance affichée.</td></tr>';
+        ? rows.map((row) => `<tr><td>${escapeHtml(row.dueDate)}</td><td>${escapeHtml(row.customer)}</td><td>${escapeHtml(formatPhoneDisplay(row.phone))}</td><td>${formatMoney(row.amountDue)}</td><td>${formatMoney(row.remaining)}</td><td>${escapeHtml(row.status)}</td></tr>`).join('')
+        : '<tr><td colspan="6">Aucune créance affichée.</td></tr>';
     const printWindow = window.open('', '_blank');
 
     if (!printWindow) {
@@ -5569,11 +9017,17 @@ function printFilteredReceivables() {
     writePrintableDocument(
         printWindow,
         'Créances clients affichées',
-        `Total restant : ${formatMoney(filteredReceivablesTotal.value)}`,
+        printSummary([
+            printDateFilterSummary(receivableFilters),
+            printSearchSummary(receivableFilters.search),
+            printFilterSummary('Statut', receivableFilters.status ? receivableStatusLabel(receivableFilters.status) : ''),
+            `${rows.length} créance${rows.length >= 2 ? 's' : ''}`,
+            `Total restant : ${formatMoney(filteredReceivablesTotal.value)}`,
+        ]),
         `<table>
-            <thead><tr><th>Échéance</th><th>Client</th><th>Téléphone</th><th>Montant dû</th><th>Payé</th><th>Reste</th><th>Statut</th></tr></thead>
+            <thead><tr><th>Échéance</th><th>Client</th><th>Téléphone</th><th>Montant dû</th><th>Reste</th><th>Statut</th></tr></thead>
             <tbody>${printableRows}</tbody>
-            <tfoot><tr><td colspan="5">Total restant</td><td colspan="2">${formatMoney(filteredReceivablesTotal.value)}</td></tr></tfoot>
+            <tfoot><tr><td colspan="4">Total restant</td><td colspan="2">${formatMoney(filteredReceivablesTotal.value)}</td></tr></tfoot>
         </table>`
     );
     notifySuccess('Impression PDF lancée.');
@@ -5701,7 +9155,7 @@ function exportFilteredCustomersExcel() {
         .replaceAll('"', '&quot;')
         .replaceAll("'", '&#039;');
     const bodyRows = rows.length
-        ? rows.map((row) => `<tr><td>${escapeHtml(row.name)}</td><td>${escapeHtml(row.phone || '-')}</td><td>${row.totalPurchases}</td><td>${row.remainingDebt}</td><td>${escapeHtml(row.situation)}</td><td>${escapeHtml(row.invoices || '-')}</td></tr>`).join('')
+        ? rows.map((row) => `<tr><td>${escapeHtml(row.name)}</td><td>${escapeHtml(formatPhoneDisplay(row.phone))}</td><td>${row.totalPurchases}</td><td>${row.remainingDebt}</td><td>${escapeHtml(row.situation)}</td><td>${escapeHtml(row.invoices || '-')}</td></tr>`).join('')
         : '<tr><td colspan="6">Aucun client affiché.</td></tr>';
     const html = `
         <table>
@@ -5728,7 +9182,7 @@ function printFilteredCustomers() {
         .replaceAll('"', '&quot;')
         .replaceAll("'", '&#039;');
     const printableRows = rows.length
-        ? rows.map((row) => `<tr><td>${escapeHtml(row.name)}</td><td>${escapeHtml(row.phone || '-')}</td><td>${formatMoney(row.totalPurchases)}</td><td>${formatMoney(row.remainingDebt)}</td><td>${escapeHtml(row.situation)}</td><td>${escapeHtml(row.invoices || '-')}</td></tr>`).join('')
+        ? rows.map((row) => `<tr><td>${escapeHtml(row.name)}</td><td>${escapeHtml(formatPhoneDisplay(row.phone))}</td><td>${formatMoney(row.totalPurchases)}</td><td>${formatMoney(row.remainingDebt)}</td><td>${escapeHtml(row.situation)}</td><td>${escapeHtml(row.invoices || '-')}</td></tr>`).join('')
         : '<tr><td colspan="6">Aucun client affiché.</td></tr>';
     const printWindow = window.open('', '_blank');
 
@@ -5741,7 +9195,13 @@ function printFilteredCustomers() {
     writePrintableDocument(
         printWindow,
         'Clients affichés',
-        `Achats : ${formatMoney(filteredCustomersTotal.value)} - Créances : ${formatMoney(filteredCustomersDebtTotal.value)}`,
+        printSummary([
+            printSearchSummary(customerFilters.search),
+            printFilterSummary('Situation', customerFilters.situation === 'debt' ? 'Avec créance' : customerFilters.situation === 'ok' ? 'Sans créance' : ''),
+            `${rows.length} client${rows.length >= 2 ? 's' : ''}`,
+            `Achats : ${formatMoney(filteredCustomersTotal.value)}`,
+            `Créances : ${formatMoney(filteredCustomersDebtTotal.value)}`,
+        ]),
         `<table>
             <thead><tr><th>Client</th><th>Téléphone</th><th>Achats</th><th>Créances</th><th>Situation</th><th>Factures</th></tr></thead>
             <tbody>${printableRows}</tbody>
@@ -5814,7 +9274,7 @@ function supplierDebtRowsForExport() {
 function exportFilteredSupplierDebtsExcel() {
     const rows = supplierDebtRowsForExport();
     const bodyRows = rows.length
-        ? rows.map((row) => `<tr><td>${printEscapeHtml(row.supplier)}</td><td>${printEscapeHtml(row.phone || '-')}</td><td>${formatMoney(row.amountDue)}</td><td>${formatMoney(row.amountPaid)}</td><td>${formatMoney(row.remaining)}</td><td>${printEscapeHtml(row.dueDate)}</td><td>${printEscapeHtml(row.status)}</td></tr>`).join('')
+        ? rows.map((row) => `<tr><td>${printEscapeHtml(row.supplier)}</td><td>${printEscapeHtml(formatPhoneDisplay(row.phone))}</td><td>${formatMoney(row.amountDue)}</td><td>${formatMoney(row.amountPaid)}</td><td>${formatMoney(row.remaining)}</td><td>${printEscapeHtml(row.dueDate)}</td><td>${printEscapeHtml(row.status)}</td></tr>`).join('')
         : '<tr><td colspan="7">Aucune dette affichée.</td></tr>';
     const html = `
         <table>
@@ -5835,7 +9295,7 @@ function exportFilteredSupplierDebtsExcel() {
 function printFilteredSupplierDebts() {
     const rows = supplierDebtRowsForExport();
     const printableRows = rows.length
-        ? rows.map((row) => `<tr><td>${printEscapeHtml(row.supplier)}</td><td>${printEscapeHtml(row.phone || '-')}</td><td>${formatMoney(row.amountDue)}</td><td>${formatMoney(row.amountPaid)}</td><td>${formatMoney(row.remaining)}</td><td>${printEscapeHtml(row.dueDate)}</td><td>${printEscapeHtml(row.status)}</td></tr>`).join('')
+        ? rows.map((row) => `<tr><td>${printEscapeHtml(row.supplier)}</td><td>${printEscapeHtml(formatPhoneDisplay(row.phone))}</td><td>${formatMoney(row.amountDue)}</td><td>${formatMoney(row.amountPaid)}</td><td>${formatMoney(row.remaining)}</td><td>${printEscapeHtml(row.dueDate)}</td><td>${printEscapeHtml(row.status)}</td></tr>`).join('')
         : '<tr><td colspan="7">Aucune dette affichée.</td></tr>';
     const printWindow = window.open('', '_blank');
 
@@ -5848,7 +9308,13 @@ function printFilteredSupplierDebts() {
     writePrintableDocument(
         printWindow,
         'Dettes fournisseurs affichées',
-        `Total restant : ${formatMoney(filteredSupplierDebtsTotal.value)}`,
+        printSummary([
+            printDateFilterSummary(supplierDebtFilters),
+            printSearchSummary(supplierDebtFilters.search),
+            printFilterSummary('Statut', supplierDebtFilters.status ? receivableStatusLabel(supplierDebtFilters.status) : ''),
+            `${rows.length} dette${rows.length >= 2 ? 's' : ''}`,
+            `Total restant : ${formatMoney(filteredSupplierDebtsTotal.value)}`,
+        ]),
         `<table>
             <thead><tr><th>Fournisseur</th><th>Téléphone</th><th>Montant dû</th><th>Payé</th><th>Reste</th><th>Échéance</th><th>Statut</th></tr></thead>
             <tbody>${printableRows}</tbody>
@@ -5881,7 +9347,7 @@ function supplierRowsForExport() {
 function exportFilteredSuppliersExcel() {
     const rows = supplierRowsForExport();
     const bodyRows = rows.length
-        ? rows.map((row) => `<tr><td>${printEscapeHtml(row.name)}</td><td>${printEscapeHtml(row.phone || '-')}</td><td>${formatMoney(row.totalDebt)}</td><td>${formatMoney(row.remainingDebt)}</td><td>${printEscapeHtml(row.situation)}</td></tr>`).join('')
+        ? rows.map((row) => `<tr><td>${printEscapeHtml(row.name)}</td><td>${printEscapeHtml(formatPhoneDisplay(row.phone))}</td><td>${formatMoney(row.totalDebt)}</td><td>${formatMoney(row.remainingDebt)}</td><td>${printEscapeHtml(row.situation)}</td></tr>`).join('')
         : '<tr><td colspan="5">Aucun fournisseur affiché.</td></tr>';
     const html = `
         <table>
@@ -5902,7 +9368,7 @@ function exportFilteredSuppliersExcel() {
 function printFilteredSuppliers() {
     const rows = supplierRowsForExport();
     const printableRows = rows.length
-        ? rows.map((row) => `<tr><td>${printEscapeHtml(row.name)}</td><td>${printEscapeHtml(row.phone || '-')}</td><td>${formatMoney(row.totalDebt)}</td><td>${formatMoney(row.remainingDebt)}</td><td>${printEscapeHtml(row.situation)}</td></tr>`).join('')
+        ? rows.map((row) => `<tr><td>${printEscapeHtml(row.name)}</td><td>${printEscapeHtml(formatPhoneDisplay(row.phone))}</td><td>${formatMoney(row.totalDebt)}</td><td>${formatMoney(row.remainingDebt)}</td><td>${printEscapeHtml(row.situation)}</td></tr>`).join('')
         : '<tr><td colspan="5">Aucun fournisseur affiché.</td></tr>';
     const printWindow = window.open('', '_blank');
 
@@ -5915,7 +9381,12 @@ function printFilteredSuppliers() {
     writePrintableDocument(
         printWindow,
         'Fournisseurs affichés',
-        `Reste dû : ${formatMoney(filteredSuppliersDebtTotal.value)}`,
+        printSummary([
+            printSearchSummary(supplierFilters.search),
+            printFilterSummary('Situation', supplierFilters.situation === 'debt' ? 'Avec dette' : supplierFilters.situation === 'ok' ? 'Sans dette' : ''),
+            `${rows.length} fournisseur${rows.length >= 2 ? 's' : ''}`,
+            `Reste dû : ${formatMoney(filteredSuppliersDebtTotal.value)}`,
+        ]),
         `<table>
             <thead><tr><th>Fournisseur</th><th>Téléphone</th><th>Total dû</th><th>Reste</th><th>Situation</th></tr></thead>
             <tbody>${printableRows}</tbody>
@@ -6028,6 +9499,85 @@ function openSupplierDetails(supplier) {
 function closeSupplierDetails() {
     showSupplierDetailsModal.value = false;
     selectedSupplierDetails.value = null;
+}
+
+function supplierPaidTotal(supplier) {
+    return (supplier?.debts || []).reduce((sum, debt) => sum + Number(debt.amount_paid || 0), 0);
+}
+
+function supplierNextDueDate(supplier) {
+    const dates = (supplier?.debts || [])
+        .filter((debt) => Number(debt.remaining || 0) > 0 && debt.due_date)
+        .map((debt) => debt.due_date)
+        .sort();
+
+    return dates.length ? formatDateOnly(dates[0]) : '-';
+}
+
+function printSupplierDetails() {
+    const supplier = selectedSupplierDetails.value;
+    if (!supplier) return;
+
+    const debts = supplier.debts || [];
+    const debtRows = debts.length
+        ? debts.map((debt) => `<tr><td>${printEscapeHtml(formatDateOnly(debt.due_date))}</td><td>${formatMoney(debt.amount_due)}</td><td>${formatMoney(debt.amount_paid)}</td><td>${formatMoney(debt.remaining)}</td><td>${printEscapeHtml(receivableStatusLabel(debt.status))}</td><td>${printEscapeHtml(debt.notes || '-')}</td></tr>`).join('')
+        : '<tr><td colspan="6">Aucune dette récente.</td></tr>';
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    writePrintableDocument(
+        printWindow,
+        `Fiche fournisseur - ${supplier.name || 'Fournisseur'}`,
+        `Téléphone : ${printEscapeHtml(formatPhoneDisplay(supplier.phone))} - Total dû : ${formatMoney(supplier.totalDebt || 0)} - Reste : ${formatMoney(supplier.remainingDebt || 0)}`,
+        `<table>
+            <tbody>
+                <tr><th>Fournisseur</th><td>${printEscapeHtml(supplier.name || '-')}</td></tr>
+                <tr><th>Téléphone</th><td>${printEscapeHtml(formatPhoneDisplay(supplier.phone))}</td></tr>
+                <tr><th>Situation</th><td>${printEscapeHtml(supplier.situation || '-')}</td></tr>
+                <tr><th>Montant payé</th><td>${formatMoney(supplierPaidTotal(supplier))}</td></tr>
+                <tr><th>Prochaine échéance</th><td>${printEscapeHtml(supplierNextDueDate(supplier))}</td></tr>
+                <tr><th>Note</th><td>${printEscapeHtml(supplier.notes || '-')}</td></tr>
+            </tbody>
+        </table>
+        <h2>Dettes récentes</h2>
+        <table>
+            <thead><tr><th>Échéance</th><th>Initial</th><th>Payé</th><th>Reste</th><th>Statut</th><th>Note</th></tr></thead>
+            <tbody>${debtRows}</tbody>
+        </table>`
+    );
+    notifySuccess('Impression de la fiche fournisseur lancée.');
+}
+
+function printSupplierDebtDetails() {
+    const debt = selectedSupplierDebtDetails.value;
+    if (!debt) return;
+
+    const payments = debt.payments || [];
+    const paymentRows = payments.length
+        ? payments.map((payment) => `<tr><td>${printEscapeHtml(formatDate(payment.paid_at))}</td><td>${printEscapeHtml(paymentLabel(payment.method))}</td><td>${printEscapeHtml(payment.reference || '-')}</td><td>${formatMoney(payment.amount)}</td></tr>`).join('')
+        : '<tr><td colspan="4">Aucun paiement enregistré.</td></tr>';
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    writePrintableDocument(
+        printWindow,
+        `Situation dette - ${debt.supplier?.name || 'Fournisseur'}`,
+        `Montant initial : ${formatMoney(debt.amount_due)} - Payé : ${formatMoney(debt.amount_paid)} - Solde dû : ${formatMoney(debt.remaining)} - Statut : ${printEscapeHtml(receivableStatusLabel(debt.status))}`,
+        `<table>
+            <tbody>
+                <tr><th>Fournisseur</th><td>${printEscapeHtml(debt.supplier?.name || '-')}</td></tr>
+                <tr><th>Téléphone</th><td>${printEscapeHtml(formatPhoneDisplay(debt.supplier?.phone))}</td></tr>
+                <tr><th>Échéance</th><td>${printEscapeHtml(formatDateOnly(debt.due_date))}</td></tr>
+                <tr><th>Note</th><td>${printEscapeHtml(debt.notes || '-')}</td></tr>
+            </tbody>
+        </table>
+        <h2>Historique des paiements</h2>
+        <table>
+            <thead><tr><th>Date</th><th>Moyen</th><th>Référence</th><th>Montant</th></tr></thead>
+            <tbody>${paymentRows}</tbody>
+        </table>`
+    );
+    notifySuccess('Impression de la dette fournisseur lancée.');
 }
 
 async function saveSupplierDebt() {
@@ -6258,9 +9808,24 @@ async function deleteSupplierDebt(debt) {
     }
 }
 
-function openExpenseModal() {
+function openExpenseModal(expense = null) {
     expenseMessage.value = '';
+    editingExpense.value = expense;
+    Object.assign(expenseForm, {
+        name: expense?.name || '',
+        category: expense?.category || '',
+        type: expense?.type || 'variable',
+        amount: expense?.amount || '',
+        spent_on: inputDateValue(expense?.spent_on) || inputDateValue(expense?.created_at) || new Date().toISOString().slice(0, 10),
+        notes: expense?.notes || '',
+    });
     showExpenseModal.value = true;
+}
+
+function closeExpenseModal() {
+    showExpenseModal.value = false;
+    editingExpense.value = null;
+    showExpenseFormCategoryMenu.value = false;
 }
 
 function openExpenseDateFilter() {
@@ -6311,13 +9876,17 @@ function chooseExpensePrint(format) {
     printFilteredExpenses();
 }
 
+function printAllTaxDocuments() {
+    const separator = taxStatementUrl.value.includes('?') ? '&' : '?';
+    window.open(`${taxStatementUrl.value}${separator}full=1`, '_blank', 'noopener');
+}
+
 function expenseRowsForExport() {
     return filteredExpenses.value.map((expense) => ({
         charge: expense.name || '',
         category: expense.category || '',
         amount: Number(expense.amount || 0),
-        date: formatDate(expense.created_at),
-        notes: expense.notes || '',
+        date: formatDateOnly(expense.spent_on),
     }));
 }
 
@@ -6330,13 +9899,13 @@ function exportFilteredExpensesExcel() {
         .replaceAll('"', '&quot;')
         .replaceAll("'", '&#039;');
     const bodyRows = rows.length
-        ? rows.map((row) => `<tr><td>${escapeHtml(row.date)}</td><td>${escapeHtml(row.charge)}</td><td>${escapeHtml(row.category)}</td><td>${row.amount}</td><td>${escapeHtml(row.notes)}</td></tr>`).join('')
-        : '<tr><td colspan="5">Aucune charge affichée.</td></tr>';
+        ? rows.map((row) => `<tr><td>${escapeHtml(row.date)}</td><td>${escapeHtml(row.charge)}</td><td>${escapeHtml(row.category)}</td><td>${row.amount}</td></tr>`).join('')
+        : '<tr><td colspan="4">Aucune charge affichée.</td></tr>';
     const html = `
         <table>
-            <thead><tr><th>Date</th><th>Charge</th><th>Catégorie</th><th>Montant</th><th>Notes</th></tr></thead>
+            <thead><tr><th>Date</th><th>Charge</th><th>Catégorie</th><th>Montant</th></tr></thead>
             <tbody>${bodyRows}</tbody>
-            <tfoot><tr><td colspan="3">Total</td><td>${filteredExpensesTotal.value}</td><td></td></tr></tfoot>
+            <tfoot><tr><td colspan="3">Total</td><td>${filteredExpensesTotal.value}</td></tr></tfoot>
         </table>
     `;
     const blob = new Blob([`\uFEFF${html}`], { type: 'application/vnd.ms-excel;charset=utf-8;' });
@@ -6357,8 +9926,8 @@ function printFilteredExpenses() {
         .replaceAll('"', '&quot;')
         .replaceAll("'", '&#039;');
     const printableRows = rows.length
-        ? rows.map((row) => `<tr><td>${escapeHtml(row.date)}</td><td>${escapeHtml(row.charge)}</td><td>${escapeHtml(row.category)}</td><td>${formatMoney(row.amount)}</td><td>${escapeHtml(row.notes || '-')}</td></tr>`).join('')
-        : '<tr><td colspan="5">Aucune charge affichée.</td></tr>';
+        ? rows.map((row) => `<tr><td>${escapeHtml(row.date)}</td><td>${escapeHtml(row.charge)}</td><td>${escapeHtml(row.category)}</td><td>${formatMoney(row.amount)}</td></tr>`).join('')
+        : '<tr><td colspan="4">Aucune charge affichée.</td></tr>';
     const printWindow = window.open('', '_blank');
 
     if (!printWindow) {
@@ -6370,11 +9939,17 @@ function printFilteredExpenses() {
     writePrintableDocument(
         printWindow,
         'Charges affichées',
-        `Total : ${formatMoney(filteredExpensesTotal.value)}`,
+        printSummary([
+            printDateFilterSummary(expenseFilters),
+            printSearchSummary(expenseFilters.search),
+            printFilterSummary('Catégorie', expenseFilters.category),
+            `${rows.length} charge${rows.length >= 2 ? 's' : ''}`,
+            `Total : ${formatMoney(filteredExpensesTotal.value)}`,
+        ]),
         `<table>
-            <thead><tr><th>Date</th><th>Charge</th><th>Catégorie</th><th>Montant</th><th>Notes</th></tr></thead>
+            <thead><tr><th>Date</th><th>Charge</th><th>Catégorie</th><th>Montant</th></tr></thead>
             <tbody>${printableRows}</tbody>
-            <tfoot><tr><td colspan="3">Total</td><td colspan="2">${formatMoney(filteredExpensesTotal.value)}</td></tr></tfoot>
+            <tfoot><tr><td colspan="3">Total</td><td>${formatMoney(filteredExpensesTotal.value)}</td></tr></tfoot>
         </table>`
     );
     notifySuccess('Impression PDF lancée.');
@@ -6385,8 +9960,11 @@ async function saveExpense() {
     expenseMessage.value = '';
 
     try {
-        const response = await fetch(`/api/businesses/${props.businessId}/expenses`, {
-            method: 'POST',
+        const url = editingExpense.value
+            ? `/api/businesses/${props.businessId}/expenses/${editingExpense.value.id}`
+            : `/api/businesses/${props.businessId}/expenses`;
+        const response = await fetch(url, {
+            method: editingExpense.value ? 'PUT' : 'POST',
             headers: requestHeaders({ 'Content-Type': 'application/json' }),
             body: JSON.stringify(expenseForm),
         });
@@ -6404,15 +9982,43 @@ async function saveExpense() {
             spent_on: new Date().toISOString().slice(0, 10),
             notes: '',
         });
-        expenseMessage.value = 'Charge enregistrée.';
+        expenseMessage.value = editingExpense.value ? 'Charge modifiée.' : 'Charge enregistrée.';
         notifySuccess(expenseMessage.value);
         await loadDashboard();
-        showExpenseModal.value = false;
+        closeExpenseModal();
     } catch (error) {
         expenseMessage.value = error.message;
         notifyError(expenseMessage.value);
     } finally {
         savingExpense.value = false;
+    }
+}
+
+async function deleteExpense(expense) {
+    const confirmed = window.confirm(`Supprimer la charge "${expense.name}" ?`);
+    if (!confirmed) {
+        return;
+    }
+
+    expenseMessage.value = '';
+
+    try {
+        const response = await fetch(`/api/businesses/${props.businessId}/expenses/${expense.id}`, {
+            method: 'DELETE',
+            headers: requestHeaders(),
+        });
+
+        if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.message || 'Suppression impossible.');
+        }
+
+        expenseMessage.value = 'Charge supprimée.';
+        notifySuccess(expenseMessage.value);
+        await loadDashboard();
+    } catch (error) {
+        expenseMessage.value = error.message;
+        notifyError(expenseMessage.value);
     }
 }
 
@@ -6508,6 +10114,35 @@ function openEmployeeDetails(employee) {
 function closeEmployeeDetails() {
     showEmployeeDetailsModal.value = false;
     selectedEmployeeDetails.value = null;
+}
+
+function printEmployeeDetails() {
+    const employee = selectedEmployeeDetails.value;
+    if (!employee) return;
+
+    const advancesTotal = (employee.advances || []).reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    writePrintableDocument(
+        printWindow,
+        `Fiche employé - ${employee.name || 'Employé'}`,
+        `Téléphone : ${printEscapeHtml(formatPhoneDisplay(employee.user?.phone))} - Salaire : ${formatMoney(employee.salary || 0)} - Avances : ${formatMoney(advancesTotal)}`,
+        `<table>
+            <tbody>
+                <tr><th>Nom</th><td>${printEscapeHtml(employee.name || '-')}</td></tr>
+                <tr><th>Téléphone</th><td>${printEscapeHtml(formatPhoneDisplay(employee.user?.phone))}</td></tr>
+                <tr><th>Nom d'utilisateur</th><td>${printEscapeHtml(employee.user?.username || '-')}</td></tr>
+                <tr><th>Type de compte</th><td>${printEscapeHtml(employeeTypeLabel(employee.type))}</td></tr>
+                <tr><th>Salaire mensuel</th><td>${formatMoney(employee.salary || 0)}</td></tr>
+                <tr><th>Paiement salaire habituel</th><td>${printEscapeHtml(formatDayMonth(employee.salary_payment_date))}</td></tr>
+                <tr><th>Date d'embauche</th><td>${printEscapeHtml(formatDateOnly(employee.hired_at))}</td></tr>
+                <tr><th>Statut</th><td>${printEscapeHtml(employee.is_active ? 'Actif' : 'Inactif')}</td></tr>
+                <tr><th>Motif du bannissement</th><td>${printEscapeHtml(employee.ban_reason || '-')}</td></tr>
+            </tbody>
+        </table>`
+    );
+    notifySuccess('Impression de la fiche employé lancée.');
 }
 
 function openAdvanceModal(employee = null) {
@@ -6674,6 +10309,10 @@ async function paySalary() {
             payrollForm.paid_amount = selectedPayrollNetEstimate.value;
         }
 
+        if (Number(payrollForm.paid_amount || 0) > selectedPayrollNetEstimate.value) {
+            throw new Error('Le salaire payé ne peut pas dépasser le salaire net estimé.');
+        }
+
         const response = await fetch(`/api/businesses/${props.businessId}/payrolls`, {
             method: 'POST',
             headers: requestHeaders({ 'Content-Type': 'application/json' }),
@@ -6704,7 +10343,12 @@ function printFilteredEmployees() {
     writePrintableDocument(
         printWindow,
         'Personnel affiché',
-        `Masse salariale : ${formatMoney(filteredEmployeesSalaryTotal.value)}`,
+        printSummary([
+            printSearchSummary(employeeFilters.search),
+            printFilterSummary('Type', employeeFilters.type ? employeeTypeLabel(employeeFilters.type) : ''),
+            `${filteredEmployees.value.length} employé${filteredEmployees.value.length >= 2 ? 's' : ''}`,
+            `Masse salariale : ${formatMoney(filteredEmployeesSalaryTotal.value)}`,
+        ]),
         `<table><thead><tr><th>Employé</th><th>Poste</th><th>Type</th><th>Salaire</th><th>Embauche</th><th>Avances</th></tr></thead><tbody>${rows}</tbody></table>`
     );
 }
@@ -6735,21 +10379,26 @@ function exportFilteredEmployeesExcel() {
 
 function printFilteredPayrolls() {
     showPayrollPrintModal.value = false;
-    const rows = filteredPayrolls.value.map((payroll) => `<tr><td>${printEscapeHtml(payroll.period)}</td><td>${printEscapeHtml(payroll.employee?.name || '-')}</td><td>${formatMoney(payroll.gross_salary)}</td><td>${formatMoney(payroll.salary_advance)}</td><td>${formatMoney(payroll.net_salary)}</td><td>${printEscapeHtml(payroll.status)}</td></tr>`).join('')
+    const rows = filteredPayrolls.value.map((payroll) => `<tr><td>${printEscapeHtml(payroll.period)}</td><td>${printEscapeHtml(payroll.employee?.name || '-')}</td><td>${formatMoney(payroll.gross_salary)}</td><td>${formatMoney(payroll.salary_advance)}</td><td>${formatMoney(payroll.net_salary)}</td><td>${printEscapeHtml(payrollStatusLabel(payroll.status))}</td></tr>`).join('')
         || '<tr><td colspan="6">Aucune paie affichée.</td></tr>';
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
     writePrintableDocument(
         printWindow,
         'Paies affichées',
-        `Total net : ${formatMoney(filteredPayrollsTotal.value)}`,
+        printSummary([
+            printSearchSummary(payrollFilters.search),
+            printFilterSummary('Statut', payrollFilters.status ? payrollStatusLabel(payrollFilters.status) : ''),
+            `${filteredPayrolls.value.length} paie${filteredPayrolls.value.length >= 2 ? 's' : ''}`,
+            `Total net : ${formatMoney(filteredPayrollsTotal.value)}`,
+        ]),
         `<table><thead><tr><th>Période</th><th>Employé</th><th>Brut</th><th>Avances</th><th>Net</th><th>Statut</th></tr></thead><tbody>${rows}</tbody></table>`
     );
 }
 
 function exportFilteredPayrollsExcel() {
     showPayrollPrintModal.value = false;
-    const rows = filteredPayrolls.value.map((payroll) => `<tr><td>${printEscapeHtml(payroll.period)}</td><td>${printEscapeHtml(payroll.employee?.name || '-')}</td><td>${Number(payroll.gross_salary || 0)}</td><td>${Number(payroll.salary_advance || 0)}</td><td>${Number(payroll.net_salary || 0)}</td><td>${printEscapeHtml(payroll.status)}</td></tr>`).join('')
+    const rows = filteredPayrolls.value.map((payroll) => `<tr><td>${printEscapeHtml(payroll.period)}</td><td>${printEscapeHtml(payroll.employee?.name || '-')}</td><td>${Number(payroll.gross_salary || 0)}</td><td>${Number(payroll.salary_advance || 0)}</td><td>${Number(payroll.net_salary || 0)}</td><td>${printEscapeHtml(payrollStatusLabel(payroll.status))}</td></tr>`).join('')
         || '<tr><td colspan="6">Aucune paie affichée.</td></tr>';
     const html = `
         <table>
@@ -6762,7 +10411,21 @@ function exportFilteredPayrollsExcel() {
     notifySuccess('Export Excel généré.');
 }
 
-onMounted(loadDashboard);
+onMounted(async () => {
+    setupCompactNavWatcher();
+
+    try {
+        await loadDashboard();
+    } catch (error) {
+        notifyError(error.message || 'Impossible de charger les données de la boutique.');
+        dashboardLoaded.value = true;
+    }
+});
+
+onBeforeUnmount(() => {
+    cleanupCompactNavWatcher();
+});
 </script>
+
 
 

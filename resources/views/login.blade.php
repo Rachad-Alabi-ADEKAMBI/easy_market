@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Connexion - EasyMarket</title>
     <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="icon" href="/icons/logo.png" type="image/png">
+    <link rel="apple-touch-icon" href="/icons/logo.png">
     <meta name="theme-color" content="#2f7d69">
     <link rel="preconnect" href="https://cdnjs.cloudflare.com">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
@@ -15,7 +17,8 @@
         body { margin:0; min-height:100vh; display:grid; place-items:center; background:var(--paper); color:var(--ink); font-family:'Poppins', system-ui, -apple-system, "Segoe UI", sans-serif; }
         .login { width:min(440px, calc(100% - 32px)); background:white; border:1px solid var(--line); border-radius:12px; padding:28px; box-shadow:0 22px 60px rgba(23,33,27,.10); }
         .brand { display:flex; flex-direction:column; align-items:center; gap:10px; color:var(--ink); text-align:center; text-decoration:none; font-weight:500; margin-bottom:22px; }
-        .logo { width:42px; height:42px; display:grid; place-items:center; border-radius:8px; background:linear-gradient(135deg,var(--primary),var(--gold)); color:#10251f; }
+        .logo { width:52px; height:52px; display:grid; place-items:center; border-radius:12px; background:white; border:1px solid var(--line); box-shadow:0 10px 24px rgba(23,33,27,.08); overflow:hidden; }
+        .logo img { width:100%; height:100%; object-fit:contain; display:block; }
         .intro { text-align:center; margin-bottom:22px; }
         h1 { margin:0 0 8px; font-size:32px; line-height:1.05; }
         h1 i { color:var(--primary); font-size:26px; }
@@ -34,6 +37,8 @@
         .remember { display:flex; align-items:center; gap:9px; color:var(--muted); font-weight:600; font-size:14px; }
         .remember input { width:18px; height:18px; accent-color:var(--primary); }
         button, .btn { min-height:44px; border:0; border-radius:8px; background:var(--gold); color:#10251f; font-weight:500; display:inline-flex; align-items:center; justify-content:center; gap:8px; text-decoration:none; cursor:pointer; }
+        .login-submit { background:var(--primary); color:white; }
+        .login-submit:hover { background:#256957; }
         .links { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:8px; margin-top:18px; }
         .links a { min-height:36px; border:1px solid var(--line); border-radius:8px; padding:8px 9px; display:inline-flex; align-items:center; justify-content:center; gap:6px; color:#2f7d69; background:#f4faf8; font-size:12px; font-weight:500; text-align:center; text-decoration:none; }
         .links a:nth-child(2) { color:#7a4d00; background:#fff8e9; border-color:#f3dfb5; }
@@ -54,8 +59,7 @@
 <body>
     <main class="login" data-error="">
         <a class="brand" href="/">
-            <span class="logo">EM</span>
-            <span>EasyMarket</span>
+            <span class="logo"><img src="/icons/logo.png" alt="EasyMarket"></span>
         </a>
         <div class="intro">
             <h1><i class="fa-solid fa-lock"></i> Connexion</h1>
@@ -65,7 +69,7 @@
         <form method="post" action="/connexion">
             <input type="hidden" name="_token" value="__CSRF_TOKEN__">
             <label><span><i class="fa-solid fa-user"></i>Email ou téléphone</span>
-                <span class="input-wrap"><i class="fa-solid fa-at"></i><input name="login" type="text" required autocomplete="username" placeholder="vous@exemple.com ou 0196228860"></span>
+                <span class="input-wrap"><i class="fa-solid fa-at"></i><input name="login" type="text" required autocomplete="username" placeholder="vous@exemple.com ou 0196228860" value="__LOGIN_VALUE__"></span>
             </label>
             <label><span><i class="fa-solid fa-key"></i>Mot de passe</span>
                 <span class="input-wrap password-wrap">
@@ -76,7 +80,7 @@
                     </button>
                 </span>
             </label>
-            <button type="submit"><i class="fa-solid fa-right-to-bracket"></i>Se connecter</button>
+            <button class="login-submit" type="submit"><i class="fa-solid fa-right-to-bracket"></i>Se connecter</button>
             <label class="remember">
                 <input name="remember" type="checkbox" value="1">
                 <span>Se souvenir de moi</span>
@@ -131,5 +135,6 @@
             navigator.serviceWorker.register('/sw.js');
         }
     </script>
+    <script src="/cookie-consent.js"></script>
 </body>
 </html>

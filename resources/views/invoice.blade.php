@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Facture __SALE_NUMBER__ - EasyMarket</title>
+    <title>__DOCUMENT_TITLE__ __SALE_NUMBER__ - EasyMarket</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800;900&display=swap');
@@ -23,19 +23,37 @@
         .header { display: grid; grid-template-columns: 1fr auto; gap: 24px; border-bottom: 2px solid var(--primary); padding-bottom: 20px; }
         .brand { display: flex; gap: 12px; align-items: center; }
         .logo { width: 54px; height: 54px; border-radius: 10px; display: grid; place-items: center; background: linear-gradient(135deg, #3f8f7b, var(--accent)); color: var(--primary); font-weight: 500; }
+        .logo i { font-size: 22px; }
+        .brand-logo-img { width: 54px; height: 54px; border-radius: 10px; object-fit: cover; border: 1px solid var(--line); }
+        .brand-details { margin-top: 8px; display: grid; gap: 4px; }
+        .brand-details p { margin: 0; }
+        .doc-detail { display: flex; align-items: center; gap: 12px; }
+        .doc-detail i { width: 18px; text-align: center; flex: 0 0 18px; }
         h1, h2, p { margin-top: 0; }
+        h2, .totals-row span, .meta-card strong { display: inline-flex; align-items: center; gap: 7px; }
+        th .th-label { display: inline-flex; align-items: center; gap: 7px; }
+        h2 i, th i, .meta-card i, .totals-row i, .footer i { color: var(--primary); }
         .muted { color: var(--muted); }
-        .invoice-box { text-align: right; }
-        .meta { margin-top: 22px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+        .invoice-box { text-align: right; min-width: 210px; }
+        .invoice-box h2 { justify-content: flex-end; margin-bottom: 8px; }
+        .invoice-box p { margin-bottom: 8px; }
+        .invoice-box .qrcode { display: block; width: 112px; height: 112px; margin-left: auto; margin-top: 8px; border: 1px solid var(--line); border-radius: 8px; padding: 5px; background: white; object-fit: contain; }
+        .meta { margin-top: 22px; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
         .meta-card { border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 24px; }
-        th, td { border-bottom: 1px solid var(--line); padding: 12px 8px; text-align: left; }
-        th { color: var(--primary); font-size: 13px; }
+        .items-table { width: 100%; border-collapse: separate; border-spacing: 0; margin-top: 28px; table-layout: fixed; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+        .items-table th, .items-table td { border-bottom: 1px solid var(--line); padding: 13px 14px; vertical-align: middle; }
+        .items-table th { background: #f6faf8; color: var(--primary); font-size: 13px; font-weight: 700; text-align: left; white-space: nowrap; }
+        .items-table tbody tr:last-child td { border-bottom: 0; }
+        .items-table td { font-size: 15px; }
+        .col-product { width: 48%; text-align: left; }
+        .col-qty { width: 14%; text-align: right; }
+        .col-price, .col-total { width: 19%; text-align: right; }
+        .items-table .amount { font-weight: 600; white-space: nowrap; }
         .totals { margin-top: 18px; display: grid; justify-content: end; }
         .totals-row { min-width: 290px; display: flex; justify-content: space-between; gap: 20px; padding: 8px 0; }
         .grand { border-top: 2px solid var(--primary); font-size: 20px; font-weight: 500; }
         .footer { margin-top: auto; padding-top: 14px; border-top: 1px solid var(--line); display: grid; gap: 12px; justify-items: center; color: var(--muted); text-align: center; font-size: 12px; }
-        #qrcode { width: 120px; height: 120px; }
+        .footer p { display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
         @media print {
             body { background: white; }
             .toolbar { display: none; }
@@ -50,42 +68,31 @@
 </head>
 <body>
     <div class="toolbar">
-        <strong><i class="fa-solid fa-file-invoice"></i> Facture __SALE_NUMBER__</strong>
+        <strong><i class="fa-solid fa-file-invoice"></i> __DOCUMENT_TITLE__ __SALE_NUMBER__</strong>
         <button class="btn" onclick="window.print()"><i class="fa-solid fa-print"></i>Imprimer / PDF</button>
     </div>
 
     <main class="sheet">
         <section class="header">
             <div>
-                <div class="brand">
-                    <div class="logo">EM</div>
-                    <div>
-                        <h1>__BUSINESS__</h1>
-                        <p class="muted">__SLOGAN__</p>
-                    </div>
-                </div>
-                <p class="muted">Téléphone : __PHONE__<br>Adresse : __ADDRESS__<br>IFU : __IFU__</p>
+                __BUSINESS_HEADER__
             </div>
             <div class="invoice-box">
-                <h2>Facture</h2>
+                <h2><i class="fa-solid fa-file-invoice-dollar"></i>__DOCUMENT_TITLE__</h2>
                 <p><strong>__SALE_NUMBER__</strong><br>__SALE_DATE__</p>
+                <img class="qrcode" src="__QR_IMAGE__" alt="QR code de vérification">
             </div>
         </section>
 
-        <section class="meta">
-            <div class="meta-card"><strong>Mode de paiement</strong><br><span class="muted">__PAYMENT__</span></div>
-            <div class="meta-card"><strong>Authenticité</strong><br><span class="muted">QR Code de vérification</span></div>
-            <div class="meta-card"><strong>Application</strong><br><span class="muted">EasyMarket</span></div>
-        </section>
+        __PAYMENT_META__
 
-        <table>
+        <table class="items-table">
             <thead>
                 <tr>
-                    <th>Produit</th>
-                    <th>Qté</th>
-                    <th>Prix unitaire</th>
-                    <th>Remise</th>
-                    <th>Total</th>
+                    <th class="col-product"><span class="th-label"><i class="fa-solid fa-box"></i>Produit</span></th>
+                    <th class="col-qty"><span class="th-label"><i class="fa-solid fa-cubes-stacked"></i>Qté</span></th>
+                    <th class="col-price"><span class="th-label"><i class="fa-solid fa-tag"></i>PU</span></th>
+                    <th class="col-total"><span class="th-label"><i class="fa-solid fa-coins"></i>Total</span></th>
                 </tr>
             </thead>
             <tbody>
@@ -94,23 +101,13 @@
         </table>
 
         <section class="totals">
-            <div class="totals-row"><span>Sous-total</span><strong>__SUBTOTAL__</strong></div>
-            <div class="totals-row"><span>Remise</span><strong>__DISCOUNT__</strong></div>
-            <div class="totals-row grand"><span>Total</span><strong>__TOTAL__</strong></div>
+            <div class="totals-row"><span><i class="fa-solid fa-calculator"></i>Sous-total</span><strong>__SUBTOTAL__</strong></div>
+            <div class="totals-row grand"><span><i class="fa-solid fa-coins"></i>Total</span><strong>__TOTAL__</strong></div>
         </section>
 
         <section class="footer">
-            <canvas id="qrcode"></canvas>
-            <p>Document généré par l'application Easy_Market.</p>
+            <p><i class="fa-solid fa-circle-check"></i> Document généré par l'application EasyMarket.</p>
         </section>
     </main>
-
-    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
-    <script>
-        QRCode.toCanvas(document.getElementById('qrcode'), decodeURIComponent('__QR_PAYLOAD__'), {
-            width: 120,
-            margin: 1
-        });
-    </script>
 </body>
 </html>

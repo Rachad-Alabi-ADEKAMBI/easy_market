@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Page introuvable - EasyMarket</title>
     <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="icon" href="/icons/logo.png" type="image/png">
+    <link rel="apple-touch-icon" href="/icons/logo.png">
     <meta name="theme-color" content="#2f7d69">
     <link rel="preconnect" href="https://cdnjs.cloudflare.com">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">

@@ -4,6 +4,8 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Mot de passe oublie - EasyMarket</title>
+    <link rel="icon" href="/icons/logo.png" type="image/png">
+    <link rel="apple-touch-icon" href="/icons/logo.png">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800;900&display=swap');
@@ -11,7 +13,8 @@
         * { box-sizing:border-box; }
         body { margin:0; min-height:100vh; display:grid; place-items:center; padding:22px; background:radial-gradient(circle at top left, rgba(47,125,105,.16), transparent 34%), var(--paper); color:var(--ink); font-family:'Poppins', system-ui, "Segoe UI", sans-serif; }
         .card { width:min(460px, 100%); background:white; border:1px solid var(--line); border-radius:14px; padding:30px; box-shadow:0 24px 70px rgba(23,33,27,.12); }
-        .brand { width:46px; height:46px; display:grid; place-items:center; border-radius:10px; background:linear-gradient(135deg, var(--primary), var(--gold)); color:var(--dark); font-weight:800; margin-bottom:18px; }
+        .brand { width:56px; height:56px; display:grid; place-items:center; border-radius:12px; background:white; border:1px solid var(--line); box-shadow:0 10px 24px rgba(23,33,27,.08); overflow:hidden; margin:0 auto 18px; }
+        .brand img { width:100%; height:100%; object-fit:contain; display:block; }
         h1 { margin:0 0 10px; font-size:31px; line-height:1.1; letter-spacing:0; }
         p { margin:0 0 20px; color:var(--muted); line-height:1.6; }
         form { display:grid; gap:15px; }
@@ -32,7 +35,7 @@
 </head>
 <body>
     <main class="card" data-sent="">
-        <div class="brand">EM</div>
+        <div class="brand"><img src="/icons/logo.png" alt="EasyMarket"></div>
         <h1>Mot de passe oublie</h1>
         <p>Renseignez votre email ou votre numero de telephone, un lien de reinitialisation de mot de passe vous sera automatiquement envoye.</p>
         <div class="sent"><i class="fa-solid fa-circle-check"></i> Si le compte existe, un lien de reinitialisation a ete genere.</div>
@@ -54,5 +57,6 @@
             document.querySelector('.card').dataset.sent = '1';
         }
     </script>
+    <script src="/cookie-consent.js"></script>
 </body>
 </html>

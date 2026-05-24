@@ -4,7 +4,7 @@ const APP_SHELL = [
   '/connexion',
   '/inscription',
   '/manifest.webmanifest',
-  '/icons/icon.svg'
+  '/icons/logo.png'
 ];
 
 self.addEventListener('install', (event) => {

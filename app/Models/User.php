@@ -20,10 +20,13 @@ class User extends Authenticatable
      */
     protected $fillable = [
         'civility',
+        'first_name',
+        'last_name',
         'name',
         'username',
         'email',
         'phone',
+        'whatsapp_phone',
         'password',
         'role',
         'can_edit_prices',

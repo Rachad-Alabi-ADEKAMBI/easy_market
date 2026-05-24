@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Inscription - EasyMarket</title>
     <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="icon" href="/icons/logo.png" type="image/png">
+    <link rel="apple-touch-icon" href="/icons/logo.png">
     <meta name="theme-color" content="#2f7d69">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
     <style>
@@ -174,6 +176,19 @@
         }
         .form-actions { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
         .help { color: var(--muted); font-size: 14px; }
+        .whatsapp-help {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            border: 1px solid #bfe6d8;
+            border-radius: 8px;
+            padding: 9px 12px;
+            background: #ecfbf5;
+            color: #126c4d;
+            font-weight: 500;
+        }
+        .whatsapp-help i { color: #25d366; font-size: 18px; }
+        .whatsapp-help strong { color: var(--primary-950); font-size: 16px; font-weight: 600; }
 
         @media (max-width: 900px) {
             .page { grid-template-columns: 1fr; }
@@ -202,8 +217,8 @@
             <h1>Créez votre espace EasyMarket</h1>
             <p>Renseignez vos informations et celles de votre boutique. Après l'inscription, vous accéderez à votre tableau de bord pour finaliser le premier paiement.</p>
             <div class="steps">
-                <div class="step"><div class="icon"><i class="fa-solid fa-user"></i></div><div><strong>1. Vos informations</strong><span>Identité, téléphone, email et mot de passe.</span></div></div>
-                <div class="step"><div class="icon"><i class="fa-solid fa-store"></i></div><div><strong>2. Votre boutique</strong><span>Nom, téléphone, adresse, IFU et slogan.</span></div></div>
+                <div class="step"><div class="icon"><i class="fa-solid fa-user"></i></div><div><strong>1. Vos informations</strong><span>Identité, téléphone personnel, WhatsApp, email et mot de passe.</span></div></div>
+                <div class="step"><div class="icon"><i class="fa-solid fa-store"></i></div><div><strong>2. Votre boutique</strong><span>Nom, téléphone boutique, WhatsApp boutique, adresse, IFU, slogan et description.</span></div></div>
                 <div class="step"><div class="icon"><i class="fa-solid fa-credit-card"></i></div><div><strong>3. Premier paiement</strong><span>Le formulaire de paiement sera disponible dans le tableau de bord.</span></div></div>
             </div>
         </section>
@@ -224,11 +239,17 @@
                                 <option value="Mme">Mme</option>
                             </select>
                         </label>
-                        <label><span class="label-text">Nom et prénom <span class="required">*</span></span>
-                            <input name="name" type="text" placeholder="Ex. Aïcha Houngan" required>
+                        <label><span class="label-text">Prénom <span class="required">*</span></span>
+                            <input name="first_name" type="text" placeholder="Ex. Aïcha" required>
                         </label>
-                        <label><span class="label-text">Téléphone <span class="required">*</span></span>
+                        <label><span class="label-text">Nom <span class="required">*</span></span>
+                            <input name="last_name" type="text" placeholder="Ex. Houngan" required>
+                        </label>
+                        <label><span class="label-text">Téléphone personnel <span class="required">*</span></span>
                             <span class="phone-field"><span>01</span><input name="phone" type="tel" inputmode="numeric" maxlength="8" pattern="\d{8}" placeholder="96228860" required></span>
+                        </label>
+                        <label><span class="label-text">WhatsApp personnel</span>
+                            <span class="phone-field"><span>01</span><input name="whatsapp_phone" type="tel" inputmode="numeric" maxlength="8" pattern="\d{8}" placeholder="96228860"></span>
                         </label>
                         <label><span class="label-text">Email</span>
                             <input name="login" type="email" placeholder="vous@exemple.com" autocomplete="username">
@@ -251,6 +272,9 @@
                         <label><span class="label-text">Téléphone boutique <span class="required">*</span></span>
                             <span class="phone-field"><span>01</span><input name="business_phone" type="tel" inputmode="numeric" maxlength="8" pattern="\d{8}" placeholder="96228860" required></span>
                         </label>
+                        <label><span class="label-text">WhatsApp boutique</span>
+                            <span class="phone-field"><span>01</span><input name="business_whatsapp_phone" type="tel" inputmode="numeric" maxlength="8" pattern="\d{8}" placeholder="96228860"></span>
+                        </label>
                         <label><span class="label-text">Adresse</span>
                             <input name="business_address" type="text" placeholder="Quartier, ville">
                         </label>
@@ -259,6 +283,9 @@
                         </label>
                         <label class="full"><span class="label-text">Slogan</span>
                             <input name="business_slogan" type="text" placeholder="Ex. Votre boutique de confiance">
+                        </label>
+                        <label class="full"><span class="label-text">Description de la boutique</span>
+                            <textarea name="business_description" placeholder="Présentez brièvement votre activité, vos produits ou vos services."></textarea>
                         </label>
                         <label class="full"><span class="label-text">Informations complémentaires</span>
                             <textarea name="notes" placeholder="Type d'activité, nombre de produits, besoins particuliers..."></textarea>
@@ -272,7 +299,7 @@
                 </div>
 
                 <div class="form-actions">
-                    <span class="help"><i class="fa-brands fa-whatsapp"></i> Besoin d'aide ? WhatsApp : 0196228860</span>
+                    <span class="help whatsapp-help"><i class="fa-brands fa-whatsapp"></i> Besoin d'aide ? WhatsApp : <strong>01 96 62 86 0</strong></span>
                     <button class="btn btn-primary" type="submit"><i class="fa-solid fa-arrow-right"></i>Créer mon compte</button>
                 </div>
             </form>
@@ -283,5 +310,6 @@
             navigator.serviceWorker.register('/sw.js');
         }
     </script>
+    <script src="/cookie-consent.js"></script>
 </body>
 </html>

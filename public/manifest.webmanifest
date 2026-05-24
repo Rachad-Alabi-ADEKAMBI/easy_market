@@ -2,15 +2,21 @@
   "name": "EasyMarket",
   "short_name": "EasyMarket",
   "description": "Gestion de commerce connectée web, mobile et desktop.",
-  "start_url": "/",
+  "start_url": "/connexion",
   "display": "standalone",
   "background_color": "#f7fbf9",
   "theme_color": "#2f7d69",
   "icons": [
     {
-      "src": "/icons/icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
+      "src": "/icons/logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
       "purpose": "any maskable"
     }
   ]

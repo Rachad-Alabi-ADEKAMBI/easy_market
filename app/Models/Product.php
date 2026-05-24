@@ -15,6 +15,7 @@ class Product extends Model
         'sale_price',
         'stock_quantity',
         'alert_threshold',
+        'notes',
         'image_path',
         'is_active',
     ];

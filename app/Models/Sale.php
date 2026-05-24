@@ -10,6 +10,7 @@ class Sale extends Model
         'business_id',
         'customer_id',
         'seller_id',
+        'canceled_by',
         'number',
         'type',
         'payment_method',
@@ -19,6 +20,8 @@ class Sale extends Model
         'total',
         'credit_due_date',
         'sold_at',
+        'canceled_at',
+        'cancellation_reason',
     ];
 
     protected function casts(): array
@@ -26,6 +29,7 @@ class Sale extends Model
         return [
             'credit_due_date' => 'date',
             'sold_at' => 'datetime',
+            'canceled_at' => 'datetime',
         ];
     }
 
@@ -42,5 +46,10 @@ class Sale extends Model
     public function seller()
     {
         return $this->belongsTo(User::class, 'seller_id');
+    }
+
+    public function canceledBy()
+    {
+        return $this->belongsTo(User::class, 'canceled_by');
     }
 }

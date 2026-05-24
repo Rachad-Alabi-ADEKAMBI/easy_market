@@ -13,6 +13,9 @@
 /.zed
 /auth.json
 /node_modules
+/desktop-dist
+/android/keystores
+/android/*.jks
 /public/build
 /public/hot
 /public/storage

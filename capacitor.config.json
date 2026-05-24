@@ -1,0 +1,12 @@
+{
+    "appId": "com.easymarket.app",
+    "appName": "EasyMarket",
+    "webDir": "public",
+    "server": {
+        "url": "https://easy-market.xo.je/",
+        "cleartext": false
+    },
+    "android": {
+        "allowMixedContent": false
+    }
+}
