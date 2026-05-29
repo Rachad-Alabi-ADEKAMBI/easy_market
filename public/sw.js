@@ -1,4 +1,4 @@
-const CACHE_NAME = 'easymarket-v2';
+const CACHE_NAME = 'easymarket-v11';
 const APP_SHELL = [
   '/',
   '/connexion',
@@ -25,16 +25,19 @@ self.addEventListener('fetch', (event) => {
   }
 
   const url = new URL(event.request.url);
-  if (url.pathname.startsWith('/api/')) {
+  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/build/')) {
     event.respondWith(fetch(event.request));
+    return;
+  }
+
+  if (event.request.destination && event.request.destination !== 'document') {
+    event.respondWith(fetch(event.request).catch(() => caches.match(event.request)));
     return;
   }
 
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        const clone = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
         return response;
       })
       .catch(() => caches.match(event.request).then((cached) => cached || caches.match('/')))

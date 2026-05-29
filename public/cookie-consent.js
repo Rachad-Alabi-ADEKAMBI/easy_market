@@ -80,6 +80,11 @@
             justify-content: center;
             gap: 8px;
         }
+        .cookie-consent__button i {
+            width: 16px;
+            text-align: center;
+            font-size: 15px;
+        }
         .cookie-consent__button--accept {
             background: #2f7d69;
             color: white;
@@ -116,8 +121,8 @@
             <p>Nous utilisons uniquement les cookies nécessaires au fonctionnement du site et à la mémorisation de votre choix. Vous pouvez accepter ou refuser les cookies optionnels.</p>
         </div>
         <div class="cookie-consent__actions">
-            <button class="cookie-consent__button cookie-consent__button--reject" type="button" data-cookie-choice="rejected"><i class="fa-solid fa-xmark" aria-hidden="true"></i>Refuser</button>
-            <button class="cookie-consent__button cookie-consent__button--accept" type="button" data-cookie-choice="accepted"><i class="fa-solid fa-check" aria-hidden="true"></i>Accepter</button>
+            <button class="cookie-consent__button cookie-consent__button--reject" type="button" data-cookie-choice="rejected"><i class="fa-solid fa-ban" aria-hidden="true"></i>Refuser</button>
+            <button class="cookie-consent__button cookie-consent__button--accept" type="button" data-cookie-choice="accepted"><i class="fa-solid fa-circle-check" aria-hidden="true"></i>Accepter</button>
         </div>
     `;
 

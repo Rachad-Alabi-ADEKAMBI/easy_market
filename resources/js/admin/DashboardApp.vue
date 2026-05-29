@@ -525,13 +525,8 @@
                             <input form="business-settings-form" :value="phoneInputValue(settingsForm.user_whatsapp_phone)" type="tel" inputmode="numeric" maxlength="8" pattern="\d{8}" placeholder="96228860" @input="settingsForm.user_whatsapp_phone = optionalPhoneWithPrefix($event.target.value)">
                         </span>
                     </label>
-                    <div class="choice-actions full">
-                        <button form="business-settings-form" class="btn btn-light" type="submit" :disabled="savingSettings">
-                            <i class="fa-solid fa-floppy-disk"></i>{{ savingSettings ? 'Enregistrement...' : 'Enregistrer les coordonnées' }}
-                        </button>
-                    </div>
                 </div>
-                <form class="payment-modal-form profile-password-form" @submit.prevent="changeProfilePassword">
+                <form class="payment-modal-form profile-password-form" @submit.prevent="saveAccountSettings">
                     <label>Mot de passe actuel
                         <span class="password-field">
                             <input v-model="profilePasswordForm.current_password" :type="showProfileCurrentPassword ? 'text' : 'password'" required autocomplete="current-password">
@@ -557,8 +552,8 @@
                         </span>
                     </label>
                     <div class="choice-actions full">
-                        <button class="btn btn-primary" type="submit" :disabled="savingProfilePassword">
-                            <i class="fa-solid fa-key"></i>{{ savingProfilePassword ? 'Modification...' : 'Modifier le mot de passe' }}
+                        <button class="btn btn-primary account-save-button" type="submit" :disabled="savingSettings || savingProfilePassword">
+                            <i class="fa-solid fa-floppy-disk"></i>{{ savingSettings || savingProfilePassword ? 'Enregistrement...' : 'Enregistrer' }}
                         </button>
                     </div>
                 </form>
@@ -633,7 +628,7 @@
                                 <div class="sale-line-price">
                                     <span>Prix unitaire</span>
                                     <input
-                                        v-if="currentUser?.can_edit_prices"
+                                        v-if="currentUserCanEditPrices"
                                         v-model.number="line.unit_price"
                                         type="number"
                                         min="0"
@@ -770,7 +765,7 @@
                             <div v-for="item in cart" :key="item.product_id" class="payment-history-row">
                                 <div>
                                     <strong>{{ item.product_name }}</strong>
-                                    <small>{{ item.quantity }} x {{ formatMoney(item.unit_price) }}</small>
+                                    <small class="invoice-line-quantity"><span>{{ item.quantity }}</span> x {{ formatMoney(item.unit_price) }}</small>
                                 </div>
                                 <b>{{ formatMoney(item.total) }}</b>
                             </div>
@@ -853,14 +848,14 @@
             </div>
 
             <section v-if="activeSection === 'services'" class="card">
-                <div class="section-title">
+                <div v-if="!currentUserCanSell" class="section-title">
                     <div>
                         <h2><span class="section-title-icon"><i class="fa-solid fa-bell-concierge"></i></span>Services</h2>
                         <p>Vendez une prestation directement ou préparez les services disponibles.</p>
                     </div>
                 </div>
 
-                <div class="customer-view-switch">
+                <div v-if="!currentUserCanSell" class="customer-view-switch">
                     <button :class="['customer-switch-card', servicePageView === 'sale' ? 'active' : '']" type="button" @click="servicePageView = 'sale'">
                         <i class="fa-solid fa-cash-register"></i>
                         <span>Section vente</span>
@@ -915,7 +910,16 @@
                                         </select>
                                     </label>
                                     <label>Prix unitaire
-                                        <input v-model.number="line.unit_price" type="number" min="0" step="1" required :readonly="!currentUser?.can_edit_prices && currentUserCanSell">
+                                        <input v-if="currentUserCanEditPrices" v-model.number="line.unit_price" type="number" min="0" step="1" required>
+                                        <strong
+                                            v-else
+                                            class="readonly-price"
+                                            role="button"
+                                            tabindex="0"
+                                            @click="showPriceEditDenied"
+                                            @keydown.enter.prevent="showPriceEditDenied"
+                                            @keydown.space.prevent="showPriceEditDenied"
+                                        >{{ formatMoney(serviceLineUnitPrice(line)) }}</strong>
                                     </label>
                                     <label>Quantité
                                         <input v-model.number="line.quantity" type="number" min="1" step="1" required>
@@ -954,10 +958,62 @@
                                 </button>
                             </div>
                         </form>
+
+                        <div class="recent-documents-panel">
+                            <div class="section-title compact-title">
+                                <div>
+                                    <h3>3 dernières factures service</h3>
+                                    <p>Accès rapide aux dernières prestations facturées.</p>
+                                </div>
+                            </div>
+                            <div v-if="recentServiceSales.length" class="table-wrap recent-documents-table-wrap">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Date</th>
+                                            <th>Facture</th>
+                                            <th v-if="!currentUserCanSell">Vendeur</th>
+                                            <th>Client</th>
+                                            <th>Paiement</th>
+                                            <th>Statut</th>
+                                            <th>Total</th>
+                                            <th>Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr v-for="sale in recentServiceSales" :key="sale.id">
+                                            <td>
+                                                <span class="table-date-stack">
+                                                    <strong>{{ splitDateTime(sale.sold_at).date }}</strong>
+                                                    <small>{{ splitDateTime(sale.sold_at).time }}</small>
+                                                </span>
+                                            </td>
+                                            <td><strong>{{ sale.number }}</strong><small>{{ sale.items.length }} service(s)</small></td>
+                                            <td v-if="!currentUserCanSell"><strong>{{ sellerDisplayName(sale.seller) }}</strong></td>
+                                            <td>{{ sale.customer?.name || 'Client comptoir' }}</td>
+                                            <td>{{ paymentLabel(sale.payment_method) }}</td>
+                                            <td><span :class="['status', saleStatusClass(sale.status)]">{{ saleStatusLabel(sale.status) }}</span></td>
+                                            <td>{{ formatMoney(sale.total) }}</td>
+                                            <td>
+                                                <div class="row-actions">
+                                                    <a class="table-icon" :href="`/businesses/${businessId}/sales/${sale.id}/invoice`" target="_blank" title="Voir la facture" aria-label="Voir la facture">
+                                                        <i class="fa-solid fa-file-invoice"></i>
+                                                    </a>
+                                                    <button v-if="canCancelSaleFromTable(sale)" class="table-icon danger-icon" type="button" @click="openSaleCancelModal(sale)" title="Annuler la commande" aria-label="Annuler la commande">
+                                                        <i class="fa-solid fa-ban"></i>
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <p v-else class="empty recent-documents-empty">Aucune facture service récente.</p>
+                        </div>
                     </article>
                 </div>
 
-                <div v-if="servicePageView === 'catalog'" class="content-grid service-catalog-grid">
+                <div v-if="!currentUserCanSell && servicePageView === 'catalog'" class="content-grid service-catalog-grid">
                     <article class="service-panel service-list-panel">
                         <div class="section-title compact-title">
                             <div>
@@ -1080,7 +1136,7 @@
                             <div v-for="item in serviceSaleCart" :key="item.key" class="payment-history-row">
                                 <div>
                                     <strong>{{ item.service_name }}</strong>
-                                    <small>{{ item.quantity }} x {{ formatMoney(item.unit_price) }}</small>
+                                    <small class="invoice-line-quantity"><span>{{ item.quantity }}</span> x {{ formatMoney(item.unit_price) }}</small>
                                 </div>
                                 <b>{{ formatMoney(item.total) }}</b>
                             </div>
@@ -1685,7 +1741,7 @@
 
                 <div class="filtered-summary">
                     <span>{{ productsCountLabel }}</span>
-                    <strong>{{ currentUser.can_edit_prices ? 'Modification prix autorisée' : 'Lecture seule' }}</strong>
+                    <strong>{{ currentUserCanEditPrices ? 'Modification prix autorisée' : 'Lecture seule' }}</strong>
                 </div>
 
                 <div class="table-wrap">
@@ -1952,7 +2008,7 @@
                         <label class="full">Motif de l’annulation
                             <textarea v-model="saleCancelForm.reason" rows="4" required placeholder="Exemple : erreur de produit, erreur de quantité, client désiste..."></textarea>
                         </label>
-                        <p class="muted full">Le stock sera réajusté automatiquement. Une commande à crédit ne peut pas être annulée si le client a déjà commencé à payer.</p>
+                        <p class="muted full">{{ saleCancelHelpText }}</p>
                         <div class="choice-actions full">
                             <button class="btn btn-light" type="button" @click="closeSaleCancelModal">
                                 <i class="fa-solid fa-xmark"></i>Retour
@@ -2079,10 +2135,10 @@
                                         <button class="table-icon" type="button" :disabled="!receivable.remaining" @click="openReceivablePayment(receivable)" title="Ajouter un paiement" aria-label="Ajouter un paiement">
                                             <i class="fa-solid fa-money-bill"></i>
                                         </button>
-                                        <button class="table-icon" type="button" @click="openReceivableAmountEdit(receivable)" title="Modifier le montant" aria-label="Modifier le montant">
+                                        <button v-if="!receivable.invoice?.id" class="table-icon" type="button" @click="openReceivableAmountEdit(receivable)" title="Modifier le montant" aria-label="Modifier le montant">
                                             <i class="fa-solid fa-pen-to-square"></i>
                                         </button>
-                                        <button class="table-icon danger-icon" type="button" @click="deleteReceivable(receivable)" title="Supprimer la dette" aria-label="Supprimer la dette">
+                                        <button v-if="!receivable.invoice?.id" class="table-icon danger-icon" type="button" @click="deleteReceivable(receivable)" title="Supprimer la dette" aria-label="Supprimer la dette">
                                             <i class="fa-solid fa-trash"></i>
                                         </button>
                                     </div>
@@ -2709,12 +2765,6 @@
                                         <button class="table-icon" type="button" :disabled="!debt.remaining" @click="openSupplierDebtPayment(debt)" title="Ajouter un paiement" aria-label="Ajouter un paiement">
                                             <i class="fa-solid fa-money-bill"></i>
                                         </button>
-                                        <button class="table-icon" type="button" @click="openSupplierDebtAmountEdit(debt)" title="Modifier le montant" aria-label="Modifier le montant">
-                                            <i class="fa-solid fa-pen-to-square"></i>
-                                        </button>
-                                        <button class="table-icon danger-icon" type="button" @click="deleteSupplierDebt(debt)" title="Supprimer la dette" aria-label="Supprimer la dette">
-                                            <i class="fa-solid fa-trash"></i>
-                                        </button>
                                     </div>
                                 </td>
                             </tr>
@@ -3229,7 +3279,7 @@
                         <p>Filtrez, triez et exportez les charges affichées, sauf achat de marchandises et salaires du personnel.</p>
                     </div>
                     <div class="section-actions">
-                        <button class="btn btn-primary" type="button" @click="openExpenseModal">
+                        <button class="btn btn-primary" type="button" @click="openExpenseModal()">
                             <i class="fa-solid fa-plus"></i>Ajouter charge
                         </button>
                         <button class="btn btn-light" type="button" @click="showExpensePrintModal = true">
@@ -3286,6 +3336,7 @@
                             <tr>
                                 <th>Date</th>
                                 <th>Charge</th>
+                                <th>Référence</th>
                                 <th>Catégorie</th>
                                 <th>Montant</th>
                                 <th>Notes</th>
@@ -3296,6 +3347,7 @@
                             <tr v-for="expense in filteredExpenses" :key="expense.id">
                                 <td>{{ formatDateOnly(expense.spent_on) }}</td>
                                 <td><strong>{{ expense.name }}</strong></td>
+                                <td>{{ expense.reference || '-' }}</td>
                                 <td>{{ expense.category }}</td>
                                 <td>{{ formatMoney(expense.amount) }}</td>
                                 <td>{{ expense.notes || '-' }}</td>
@@ -3311,7 +3363,7 @@
                                 </td>
                             </tr>
                             <tr v-if="!filteredExpenses.length">
-                                <td colspan="6" class="empty">Aucune charge ne correspond aux filtres.</td>
+                                <td colspan="7" class="empty">Aucune charge ne correspond aux filtres.</td>
                             </tr>
                         </tbody>
                     </table>
@@ -3388,7 +3440,7 @@
                 <section class="form-modal">
                     <div class="section-title">
                         <div class="modal-title-block">
-                            <h2>{{ editingExpense ? 'Modifier charge' : 'Nouvelle charge' }}</h2>
+                            <h2>{{ editingExpense ? 'Modifier charge' : 'Ajouter une charge' }}</h2>
                         </div>
                         <button class="table-icon" type="button" @click="closeExpenseModal" title="Fermer" aria-label="Fermer">
                             <i class="fa-solid fa-xmark"></i>
@@ -3398,6 +3450,9 @@
                     <form class="expense-form" @submit.prevent="saveExpense">
                         <label>Nom
                             <input v-model="expenseForm.name" type="text" required placeholder="Ex. Loyer boutique">
+                        </label>
+                        <label>Référence
+                            <input v-model="expenseForm.reference" type="text" placeholder="Ex. FACT-2026-001">
                         </label>
                         <label>Catégorie
                             <div class="category-picker">
@@ -3423,7 +3478,7 @@
                             <input v-model="expenseForm.notes" type="text" placeholder="Optionnel">
                         </label>
                         <button class="btn btn-primary" type="submit" :disabled="savingExpense">
-                            <i class="fa-solid fa-plus"></i>{{ savingExpense ? 'Enregistrement...' : (editingExpense ? 'Modifier la charge' : 'Ajouter la charge') }}
+                            <i class="fa-solid fa-plus"></i>{{ savingExpense ? 'Enregistrement...' : (editingExpense ? 'Modifier la charge' : 'Ajouter une charge') }}
                         </button>
                     </form>
                     <p v-if="expenseMessage" class="message">{{ expenseMessage }}</p>
@@ -3776,6 +3831,16 @@
                                         </button>
                                     </span>
                                 </label>
+                                <label class="employee-permission-toggle full">
+                                    <input v-model="employeeForm.can_edit_prices" class="employee-permission-input" type="checkbox">
+                                    <span class="employee-permission-box" aria-hidden="true">
+                                        <i class="fa-solid fa-check"></i>
+                                    </span>
+                                    <span class="employee-permission-text">
+                                        <strong>Autoriser la modification des prix</strong>
+                                        <small>Le vendeur pourra modifier le prix unitaire avant de valider une vente.</small>
+                                    </span>
+                                </label>
                             </div>
                         </div>
                         <div class="choice-actions full">
@@ -3811,6 +3876,10 @@
                         <div><span>Téléphone</span><strong>{{ formatPhoneDisplay(selectedEmployeeDetails?.user?.phone) }}</strong></div>
                         <div><span>Nom d'utilisateur</span><strong>{{ selectedEmployeeDetails?.user?.username || '-' }}</strong></div>
                         <div><span>Type de compte</span><strong>{{ employeeTypeLabel(selectedEmployeeDetails?.type) }}</strong></div>
+                        <div v-if="selectedEmployeeDetails?.type === 'seller'">
+                            <span>Modification des prix</span>
+                            <strong>{{ selectedEmployeeDetails?.user?.can_edit_prices ? 'Autorisée' : 'Non autorisée' }}</strong>
+                        </div>
                         <div><span>Salaire mensuel</span><strong>{{ formatMoney(selectedEmployeeDetails?.salary || 0) }}</strong></div>
                         <div><span>Date d'embauche</span><strong>{{ formatDateOnly(selectedEmployeeDetails?.hired_at) }}</strong></div>
                         <div><span>Statut</span><strong>{{ selectedEmployeeDetails?.is_active ? 'Actif' : 'Inactif' }}</strong></div>
@@ -4486,9 +4555,16 @@ const pageHelpItems = {
     services: {
         title: 'Comprendre les services',
         intro: 'Cette page prépare la vente de prestations en plus des produits physiques.',
-        infos: ['Catalogue des services avec prix, durée et catégorie.', 'État actif ou suspendu pour contrôler ce qui est vendable.', 'Vue vendeur limitée au catalogue disponible.'],
-        actions: ['Créer ou modifier un service côté administrateur.', 'Filtrer les prestations par catégorie ou statut.', 'Préparer ensuite l’intégration à la vente.'],
+        infos: ['Vente directe de services avec client, prix, quantité et paiement.', 'Catalogue des services avec prix et détails côté administrateur.', 'Vue vendeur limitée à la facturation des services disponibles.'],
+        actions: ['Créer ou modifier un service côté administrateur.', 'Choisir un service et valider la facture.', 'Imprimer ou consulter les dernières factures service.'],
         example: 'Une boutique peut vendre une livraison, une installation ou une maintenance en plus du produit vendu.',
+    },
+    'seller-services': {
+        title: 'Comprendre la vente de services',
+        intro: 'Cette page permet au vendeur de facturer directement une prestation disponible.',
+        infos: ['Recherche ou création rapide du client.', 'Choix d’un ou plusieurs services avec quantité et total.', 'Prix modifiable uniquement si l’administrateur vous a donné cette autorisation.'],
+        actions: ['Sélectionner le client.', 'Ajouter les services à facturer.', 'Valider la facture puis choisir l’impression, l’envoi ou la suite.'],
+        example: 'Pour facturer une livraison ou une installation, choisissez le client, sélectionnez le service, vérifiez le total puis validez la facture.',
     },
     customers: {
         title: 'Comprendre clients et créances',
@@ -4568,8 +4644,15 @@ const pageHelpItems = {
         example: 'Si votre nom est mal écrit sur les documents internes, signalez-le à l’administrateur pour correction.',
     },
 };
-const pageHelpContent = computed(() => pageHelpItems[activeSection.value] || pageHelpItems.dashboard);
 const currentUserCanSell = computed(() => currentUser.value?.role === 'Vendeur');
+const currentUserCanEditPrices = computed(() => Boolean(currentUser.value?.can_edit_prices));
+const pageHelpContent = computed(() => {
+    if (currentUserCanSell.value && activeSection.value === 'services') {
+        return pageHelpItems['seller-services'];
+    }
+
+    return pageHelpItems[activeSection.value] || pageHelpItems.dashboard;
+});
 const sellerCheckoutActive = computed(() => (currentUserCanSell.value && ['seller-cashier', 'sales'].includes(activeSection.value)) || activeSection.value === 'admin-sale-proforma');
 const salesHistoryActive = computed(() => activeSection.value === 'sales' || activeSection.value === 'seller-sales');
 const sellerCheckoutSubmitLabel = computed(() => saleDraftIsProforma.value ? 'Enregistrer la proforma' : 'Valider la facture');
@@ -4977,6 +5060,7 @@ const supplierSort = ref('name_asc');
 
 const expenseForm = reactive({
     name: '',
+    reference: '',
     category: '',
     type: 'variable',
     amount: '',
@@ -5067,6 +5151,7 @@ const employeeForm = reactive({
     salary: '',
     salary_payment_date: '',
     hired_at: '',
+    can_edit_prices: false,
 });
 const employeePasswordVisible = ref(false);
 const employeeFilters = reactive({
@@ -5211,7 +5296,7 @@ const serviceSaleCart = computed(() => serviceSaleLines.value.map((line) => {
         return null;
     }
 
-    const unitPrice = Number(line.unit_price || 0);
+    const unitPrice = serviceLineUnitPrice(line);
 
     return {
         key: line.key,
@@ -5428,7 +5513,7 @@ const cart = computed(() => saleLines.value.map((line) => {
         return null;
     }
 
-    const unitPrice = currentUser.value?.can_edit_prices && line.unit_price !== ''
+    const unitPrice = currentUserCanEditPrices.value && line.unit_price !== ''
         ? Number(line.unit_price || 0)
         : Number(product.sale_price || 0);
     const subtotal = quantity * unitPrice;
@@ -5579,6 +5664,20 @@ const recentCheckoutDocuments = computed(() => {
         .slice(0, 3);
 });
 const recentCheckoutTitle = computed(() => saleDraftIsProforma.value ? '3 dernières proformas' : '3 dernières factures');
+const recentServiceSales = computed(() => sales.value
+    .filter((sale) => (sale.type || 'invoice') === 'invoice' && (sale.items || []).some((item) => !item.product_id))
+    .sort((first, second) => String(second.sold_at || '').localeCompare(String(first.sold_at || '')))
+    .slice(0, 3));
+const saleToCancelHasStockItems = computed(() => (saleToCancel.value?.items || []).some((item) => item.product_id));
+const saleCancelHelpText = computed(() => {
+    const creditText = 'Une commande à crédit ne peut pas être annulée si le client a déjà commencé à payer.';
+
+    if (saleToCancelHasStockItems.value) {
+        return `Le stock sera réajusté automatiquement. ${creditText}`;
+    }
+
+    return `Cette facture de service sera annulée sans mouvement de stock. ${creditText}`;
+});
 
 function sellerDisplayName(seller) {
     return seller?.username || seller?.name || 'Vendeur';
@@ -5603,7 +5702,7 @@ const filteredExpenses = computed(() => {
     const term = expenseFilters.search.trim().toLowerCase();
     const rows = expenses.value.filter((expense) => {
         const matchesSearch = !term
-            || [expense.name, expense.category, expense.notes].some((value) => String(value || '').toLowerCase().includes(term));
+            || [expense.name, expense.reference, expense.category, expense.notes].some((value) => String(value || '').toLowerCase().includes(term));
         const matchesCategory = !expenseFilters.category || expense.category === expenseFilters.category;
         const matchesExactDate = !expenseFilters.exactDate || expense.spent_on === expenseFilters.exactDate;
         const matchesStartDate = !expenseFilters.startDate || expense.spent_on >= expenseFilters.startDate;
@@ -6443,6 +6542,7 @@ watch(() => employeeForm.type, (type) => {
     if (type !== 'seller') {
         employeeForm.username = '';
         employeeForm.password = '';
+        employeeForm.can_edit_prices = false;
         employeePasswordVisible.value = false;
     }
 });
@@ -6454,6 +6554,10 @@ watch([currentUserCanSell, activeSection], () => {
 
     if (!sellerSections.includes(activeSection.value)) {
         activeSection.value = 'seller-cashier';
+    }
+
+    if (activeSection.value === 'services') {
+        servicePageView.value = 'sale';
     }
 
 }, { immediate: true });
@@ -6768,6 +6872,16 @@ function dateToDayMonth(value) {
     return String(value);
 }
 
+function dateToInputDate(value) {
+    if (!value) {
+        return '';
+    }
+
+    const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/);
+
+    return match ? `${match[1]}-${match[2]}-${match[3]}` : String(value);
+}
+
 function formatDayMonthInput(value) {
     const digits = String(value || '').replace(/\D/g, '').slice(0, 4);
     if (digits.length <= 2) {
@@ -6943,13 +7057,13 @@ async function loadDashboard() {
         whatsapp_reports_enabled: Boolean(data.business?.whatsapp_reports_enabled),
         whatsapp_report_time: data.business?.whatsapp_report_time?.slice(0, 5) || '08:00',
         whatsapp_report_type: data.business?.whatsapp_report_type || 'global',
-        show_logo_on_documents: Boolean(data.business?.show_logo_on_documents),
-        show_ifu_on_documents: Boolean(data.business?.show_ifu_on_documents),
+        show_logo_on_documents: data.business?.show_logo_on_documents !== false,
+        show_ifu_on_documents: data.business?.show_ifu_on_documents !== false,
         show_slogan_on_documents: Boolean(data.business?.show_slogan_on_documents),
-        show_description_on_documents: Boolean(data.business?.show_description_on_documents),
+        show_description_on_documents: data.business?.show_description_on_documents !== false,
         show_phone_on_documents: data.business?.show_phone_on_documents !== false,
         show_whatsapp_on_documents: data.business?.show_whatsapp_on_documents !== false,
-        show_address_on_documents: Boolean(data.business?.show_address_on_documents),
+        show_address_on_documents: data.business?.show_address_on_documents !== false,
     });
     settingsLogoFile.value = null;
     settingsLogoPreview.value = '';
@@ -7199,6 +7313,24 @@ async function changeProfilePassword() {
     }
 }
 
+async function saveAccountSettings() {
+    profileMessage.value = '';
+    await saveSettings();
+
+    const wantsPasswordChange = Boolean(
+        profilePasswordForm.current_password
+        || profilePasswordForm.password
+        || profilePasswordForm.password_confirmation,
+    );
+
+    if (wantsPasswordChange) {
+        await changeProfilePassword();
+    } else {
+        profileMessage.value = 'Paramètres du compte enregistrés.';
+        notifySuccess(profileMessage.value);
+    }
+}
+
 async function requestSubscriptionActivation() {
     savingSubscription.value = true;
     subscriptionMessage.value = '';
@@ -7396,6 +7528,14 @@ async function saveService() {
 }
 
 async function removeService(service) {
+    const confirmed = window.confirm(
+        `Supprimer le service "${service.name}" ? Il ne sera plus disponible à la vente.`,
+    );
+
+    if (!confirmed) {
+        return;
+    }
+
     try {
         const response = await fetch(`/api/businesses/${props.businessId}/services/${service.id}/archive`, {
             method: 'PATCH',
@@ -7404,12 +7544,12 @@ async function removeService(service) {
 
         if (!response.ok) {
             const data = await response.json();
-            throw new Error(data.message || 'Impossible de suspendre le service.');
+            throw new Error(data.message || 'Impossible de supprimer le service.');
         }
 
-        const savedService = await response.json();
-        services.value = services.value.map((item) => item.id === savedService.id ? savedService : item);
-        notifySuccess('Service suspendu.');
+        const data = await response.json();
+        services.value = services.value.filter((item) => Number(item.id) !== Number(data.id || service.id));
+        notifySuccess(data.message || 'Service supprimé.');
     } catch (error) {
         notifyError(error.message);
     }
@@ -7433,11 +7573,21 @@ function selectableServicesForLine(line) {
 }
 
 function serviceLineTotal(line) {
-    return Math.max(0, Number(line.quantity || 0) * Number(line.unit_price || 0));
+    return Math.max(0, Number(line.quantity || 0) * serviceLineUnitPrice(line));
 }
 
 function syncServiceLinePrice(line) {
     line.unit_price = Number(selectedServiceForLine(line)?.price || 0);
+}
+
+function serviceLineUnitPrice(line) {
+    const service = selectedServiceForLine(line);
+
+    if (currentUserCanEditPrices.value) {
+        return Number(line.unit_price || 0);
+    }
+
+    return Number(service?.price || 0);
 }
 
 function addServiceSaleLine() {
@@ -7472,10 +7622,12 @@ function validateServiceSaleDraft() {
             errors.push(`${lineLabel} - Quantité : indiquez une quantité valide.`);
         }
 
-        if (line.unit_price === '' || line.unit_price === null || Number.isNaN(Number(line.unit_price))) {
-            errors.push(`${lineLabel} - Prix unitaire : champ obligatoire.`);
-        } else if (Number(line.unit_price || 0) < 0) {
-            errors.push(`${lineLabel} - Prix unitaire : indiquez un prix valide.`);
+        if (currentUserCanEditPrices.value) {
+            if (line.unit_price === '' || line.unit_price === null || Number.isNaN(Number(line.unit_price))) {
+                errors.push(`${lineLabel} - Prix unitaire : champ obligatoire.`);
+            } else if (Number(line.unit_price || 0) < 0) {
+                errors.push(`${lineLabel} - Prix unitaire : indiquez un prix valide.`);
+            }
         }
     });
 
@@ -7988,7 +8140,7 @@ function saleLineProduct(line) {
 }
 
 function saleLineUnitPrice(line) {
-    if (currentUser.value?.can_edit_prices && line.unit_price !== '') {
+    if (currentUserCanEditPrices.value && line.unit_price !== '') {
         return Number(line.unit_price || 0);
     }
 
@@ -8178,7 +8330,7 @@ function validateSaleDraft() {
             errors.push(`${lineLabel} - Quantité : indiquez une quantité valide.`);
         }
 
-        if (currentUser.value?.can_edit_prices && line.unit_price !== '' && Number(line.unit_price) < 0) {
+        if (currentUserCanEditPrices.value && line.unit_price !== '' && Number(line.unit_price) < 0) {
             errors.push(`${lineLabel} - Prix unitaire : indiquez un prix valide.`);
         }
     });
@@ -8451,7 +8603,9 @@ async function cancelSale() {
             throw new Error(data.message || 'Annulation impossible.');
         }
 
-        saleCancelMessage.value = 'Commande annulée et stock réajusté.';
+        saleCancelMessage.value = saleToCancelHasStockItems.value
+            ? 'Commande annulée et stock réajusté.'
+            : 'Facture de service annulée.';
         notifySuccess(saleCancelMessage.value);
         closeSaleCancelModal();
         await loadDashboard();
@@ -9809,10 +9963,15 @@ async function deleteSupplierDebt(debt) {
 }
 
 function openExpenseModal(expense = null) {
+    if (expense instanceof Event) {
+        expense = null;
+    }
+
     expenseMessage.value = '';
     editingExpense.value = expense;
     Object.assign(expenseForm, {
         name: expense?.name || '',
+        reference: expense?.reference || '',
         category: expense?.category || '',
         type: expense?.type || 'variable',
         amount: expense?.amount || '',
@@ -9884,6 +10043,7 @@ function printAllTaxDocuments() {
 function expenseRowsForExport() {
     return filteredExpenses.value.map((expense) => ({
         charge: expense.name || '',
+        reference: expense.reference || '',
         category: expense.category || '',
         amount: Number(expense.amount || 0),
         date: formatDateOnly(expense.spent_on),
@@ -9899,13 +10059,13 @@ function exportFilteredExpensesExcel() {
         .replaceAll('"', '&quot;')
         .replaceAll("'", '&#039;');
     const bodyRows = rows.length
-        ? rows.map((row) => `<tr><td>${escapeHtml(row.date)}</td><td>${escapeHtml(row.charge)}</td><td>${escapeHtml(row.category)}</td><td>${row.amount}</td></tr>`).join('')
-        : '<tr><td colspan="4">Aucune charge affichée.</td></tr>';
+        ? rows.map((row) => `<tr><td>${escapeHtml(row.date)}</td><td>${escapeHtml(row.charge)}</td><td>${escapeHtml(row.reference)}</td><td>${escapeHtml(row.category)}</td><td>${row.amount}</td></tr>`).join('')
+        : '<tr><td colspan="5">Aucune charge affichée.</td></tr>';
     const html = `
         <table>
-            <thead><tr><th>Date</th><th>Charge</th><th>Catégorie</th><th>Montant</th></tr></thead>
+            <thead><tr><th>Date</th><th>Charge</th><th>Référence</th><th>Catégorie</th><th>Montant</th></tr></thead>
             <tbody>${bodyRows}</tbody>
-            <tfoot><tr><td colspan="3">Total</td><td>${filteredExpensesTotal.value}</td></tr></tfoot>
+            <tfoot><tr><td colspan="4">Total</td><td>${filteredExpensesTotal.value}</td></tr></tfoot>
         </table>
     `;
     const blob = new Blob([`\uFEFF${html}`], { type: 'application/vnd.ms-excel;charset=utf-8;' });
@@ -9926,8 +10086,8 @@ function printFilteredExpenses() {
         .replaceAll('"', '&quot;')
         .replaceAll("'", '&#039;');
     const printableRows = rows.length
-        ? rows.map((row) => `<tr><td>${escapeHtml(row.date)}</td><td>${escapeHtml(row.charge)}</td><td>${escapeHtml(row.category)}</td><td>${formatMoney(row.amount)}</td></tr>`).join('')
-        : '<tr><td colspan="4">Aucune charge affichée.</td></tr>';
+        ? rows.map((row) => `<tr><td>${escapeHtml(row.date)}</td><td>${escapeHtml(row.charge)}</td><td>${escapeHtml(row.reference)}</td><td>${escapeHtml(row.category)}</td><td>${formatMoney(row.amount)}</td></tr>`).join('')
+        : '<tr><td colspan="5">Aucune charge affichée.</td></tr>';
     const printWindow = window.open('', '_blank');
 
     if (!printWindow) {
@@ -9947,9 +10107,9 @@ function printFilteredExpenses() {
             `Total : ${formatMoney(filteredExpensesTotal.value)}`,
         ]),
         `<table>
-            <thead><tr><th>Date</th><th>Charge</th><th>Catégorie</th><th>Montant</th></tr></thead>
+            <thead><tr><th>Date</th><th>Charge</th><th>Référence</th><th>Catégorie</th><th>Montant</th></tr></thead>
             <tbody>${printableRows}</tbody>
-            <tfoot><tr><td colspan="3">Total</td><td>${formatMoney(filteredExpensesTotal.value)}</td></tr></tfoot>
+            <tfoot><tr><td colspan="4">Total</td><td>${formatMoney(filteredExpensesTotal.value)}</td></tr></tfoot>
         </table>`
     );
     notifySuccess('Impression PDF lancée.');
@@ -9976,6 +10136,7 @@ async function saveExpense() {
 
         Object.assign(expenseForm, {
             name: '',
+            reference: '',
             category: '',
             type: 'variable',
             amount: '',
@@ -10040,6 +10201,7 @@ async function saveEmployee() {
             phone: type === 'seller' ? employeeForm.phone : '',
             username: type === 'seller' ? employeeForm.username : '',
             password: type === 'seller' ? employeeForm.password : '',
+            can_edit_prices: type === 'seller' ? Boolean(employeeForm.can_edit_prices) : false,
             type,
             salary: employeeForm.salary,
             salary_payment_date: employeeForm.salary_payment_date,
@@ -10069,6 +10231,7 @@ async function saveEmployee() {
             salary: '',
             salary_payment_date: '',
             hired_at: '',
+            can_edit_prices: false,
         });
         employeeMessage.value = 'Employé enregistré.';
         notifySuccess(employeeMessage.value);
@@ -10086,8 +10249,9 @@ function openEmployeeModal(employee = null) {
     employeeMessage.value = '';
     editingEmployee.value = employee;
     employeePasswordVisible.value = false;
+    const employeeName = String(employee?.name || employee?.user?.name || '').trim();
     Object.assign(employeeForm, {
-        name: employee?.name || '',
+        name: employeeName,
         phone: employee?.user?.phone || '',
         username: employee?.user?.username || '',
         password: '',
@@ -10095,7 +10259,8 @@ function openEmployeeModal(employee = null) {
         custom_type: '',
         salary: employee?.salary || '',
         salary_payment_date: dateToDayMonth(employee?.salary_payment_date),
-        hired_at: employee?.hired_at || '',
+        hired_at: dateToInputDate(employee?.hired_at),
+        can_edit_prices: Boolean(employee?.user?.can_edit_prices),
     });
     showEmployeeModal.value = true;
 }
@@ -10124,6 +10289,10 @@ function printEmployeeDetails() {
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
 
+    const pricePermissionRow = employee.type === 'seller'
+        ? `<tr><th>Modification des prix</th><td>${printEscapeHtml(employee.user?.can_edit_prices ? 'Autorisée' : 'Non autorisée')}</td></tr>`
+        : '';
+
     writePrintableDocument(
         printWindow,
         `Fiche employé - ${employee.name || 'Employé'}`,
@@ -10134,6 +10303,7 @@ function printEmployeeDetails() {
                 <tr><th>Téléphone</th><td>${printEscapeHtml(formatPhoneDisplay(employee.user?.phone))}</td></tr>
                 <tr><th>Nom d'utilisateur</th><td>${printEscapeHtml(employee.user?.username || '-')}</td></tr>
                 <tr><th>Type de compte</th><td>${printEscapeHtml(employeeTypeLabel(employee.type))}</td></tr>
+                ${pricePermissionRow}
                 <tr><th>Salaire mensuel</th><td>${formatMoney(employee.salary || 0)}</td></tr>
                 <tr><th>Paiement salaire habituel</th><td>${printEscapeHtml(formatDayMonth(employee.salary_payment_date))}</td></tr>
                 <tr><th>Date d'embauche</th><td>${printEscapeHtml(formatDateOnly(employee.hired_at))}</td></tr>

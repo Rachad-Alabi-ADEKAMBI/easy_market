@@ -12,6 +12,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('business_id')->constrained()->cascadeOnDelete();
             $table->string('name');
+            $table->string('reference')->nullable();
             $table->string('category', 80);
             $table->string('type', 30)->default('variable');
             $table->unsignedInteger('amount');

@@ -23,7 +23,7 @@
     {!! $js !!}
     <script>
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('/sw.js');
+            navigator.serviceWorker.register('/sw.js?v=10');
         }
     </script>
     <script src="/logout-confirm.js"></script>

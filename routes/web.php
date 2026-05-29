@@ -402,9 +402,9 @@ Route::post('/inscription', function (Request $request) {
         'civility' => ['required', 'string', 'max:10'],
         'first_name' => ['required', 'string', 'max:120'],
         'last_name' => ['required', 'string', 'max:120'],
-        'phone' => requiredPhoneRule(),
+        'phone' => [...requiredPhoneRule(), Rule::unique('users', 'phone')->whereNotNull('phone')],
         'whatsapp_phone' => nullablePhoneRule(),
-        'login' => ['nullable', 'email', 'max:255'],
+        'login' => ['nullable', 'email', 'max:255', Rule::unique('users', 'email')],
         'password' => ['required', 'confirmed', 'min:8'],
         'business_name' => ['required', 'string', 'max:255'],
         'business_phone' => requiredPhoneRule(),
@@ -413,6 +413,14 @@ Route::post('/inscription', function (Request $request) {
         'business_ifu' => ['nullable', 'string', 'max:255'],
         'business_slogan' => ['nullable', 'string', 'max:255'],
         'business_description' => ['nullable', 'string', 'max:1000'],
+    ], [
+        'phone.unique' => 'Ce numéro de téléphone est déjà utilisé.',
+        'login.unique' => 'Cet email est déjà utilisé.',
+        'login.email' => 'Renseignez un email valide.',
+        'password.confirmed' => 'La confirmation du mot de passe ne correspond pas.',
+        'password.min' => 'Le mot de passe doit contenir au moins 8 caractères.',
+        '*.required' => 'Ce champ est obligatoire.',
+        '*.regex' => 'Le numéro doit commencer par 01 et contenir 10 chiffres.',
     ]);
 
     if ($validator->fails()) {
@@ -692,7 +700,7 @@ Route::get('/api/businesses/{business}/dashboard', function (Business $business)
         'employees' => Employee::query()
             ->where('business_id', $business->id)
             ->with([
-                'user:id,name,username,phone',
+                'user:id,name,username,phone,can_edit_prices',
                 'advances' => fn ($query) => $query->latest('advanced_on'),
             ])
             ->latest()
@@ -1087,6 +1095,7 @@ Route::post('/api/businesses/{business}/employees', function (Request $request, 
         'salary' => ['required', 'integer', 'min:0'],
         'salary_payment_date' => ['nullable', 'date_format:Y-m-d'],
         'hired_at' => ['nullable', 'date'],
+        'can_edit_prices' => ['nullable', 'boolean'],
     ]);
 
     $validator->sometimes('phone', requiredPhoneRule(), fn ($input) => $input->type === 'seller');
@@ -1103,6 +1112,7 @@ Route::post('/api/businesses/{business}/employees', function (Request $request, 
     $user = null;
     if ($request->input('type') === 'seller') {
         $phone = trim((string) $request->input('phone'));
+        $canEditPrices = $request->boolean('can_edit_prices');
         $user = User::create([
             'name' => $request->input('name'),
             'username' => $request->input('username'),
@@ -1110,14 +1120,14 @@ Route::post('/api/businesses/{business}/employees', function (Request $request, 
             'email' => $request->input('username').'@seller.easymarket.local',
             'password' => $request->input('password'),
             'role' => 'seller',
-            'can_edit_prices' => false,
+            'can_edit_prices' => $canEditPrices,
             'is_active' => true,
         ]);
 
         $business->users()->syncWithoutDetaching([
             $user->id => [
                 'role' => 'seller',
-                'can_edit_prices' => false,
+                'can_edit_prices' => $canEditPrices,
             ],
         ]);
     }
@@ -1155,6 +1165,7 @@ Route::put('/api/businesses/{business}/employees/{employee}', function (Request 
         'salary' => ['required', 'integer', 'min:0'],
         'salary_payment_date' => ['nullable', 'date_format:Y-m-d'],
         'hired_at' => ['nullable', 'date'],
+        'can_edit_prices' => ['nullable', 'boolean'],
     ]);
 
     $validator->sometimes('phone', requiredPhoneRule(), fn ($input) => $input->type === 'seller');
@@ -1185,13 +1196,24 @@ Route::put('/api/businesses/{business}/employees/{employee}', function (Request 
         if ($willBeSeller) {
             $updates['phone'] = normalizePhoneInput($request->input('phone'));
             $updates['username'] = $request->input('username');
+            $updates['can_edit_prices'] = $request->boolean('can_edit_prices');
         }
 
         if ($wasSeller && ! $willBeSeller) {
             $updates['is_active'] = false;
+            $updates['can_edit_prices'] = false;
         }
 
         $employee->user->update($updates);
+
+        if ($willBeSeller) {
+            $business->users()->syncWithoutDetaching([
+                $employee->user->id => [
+                    'role' => 'seller',
+                    'can_edit_prices' => $request->boolean('can_edit_prices'),
+                ],
+            ]);
+        }
     }
 
     return response()->json($employee->fresh('user'));
@@ -1398,6 +1420,7 @@ Route::post('/api/businesses/{business}/expenses', function (Request $request, B
 
     $validator = Validator::make($request->all(), [
         'name' => ['required', 'string', 'max:255'],
+        'reference' => ['nullable', 'string', 'max:255'],
         'category' => ['required', 'string', Rule::in(expenseCategories())],
         'type' => ['nullable', 'in:fixed,variable'],
         'amount' => ['required', 'integer', 'min:1'],
@@ -1415,6 +1438,7 @@ Route::post('/api/businesses/{business}/expenses', function (Request $request, B
     $expense = Expense::create([
         'business_id' => $business->id,
         'name' => $request->input('name'),
+        'reference' => $request->input('reference'),
         'category' => $request->input('category'),
         'type' => $request->input('type', 'variable'),
         'amount' => $request->integer('amount'),
@@ -1432,6 +1456,7 @@ Route::put('/api/businesses/{business}/expenses/{expense}', function (Request $r
 
     $validator = Validator::make($request->all(), [
         'name' => ['required', 'string', 'max:255'],
+        'reference' => ['nullable', 'string', 'max:255'],
         'category' => ['required', 'string', Rule::in(expenseCategories())],
         'type' => ['nullable', 'in:fixed,variable'],
         'amount' => ['required', 'integer', 'min:1'],
@@ -1448,6 +1473,7 @@ Route::put('/api/businesses/{business}/expenses/{expense}', function (Request $r
 
     $expense->update([
         'name' => $request->input('name'),
+        'reference' => $request->input('reference'),
         'category' => $request->input('category'),
         'type' => $request->input('type', 'variable'),
         'amount' => $request->integer('amount'),
@@ -1966,7 +1992,7 @@ function salePublicInvoiceUrl(Sale $sale): string
 
 function renderSaleInvoiceHtml(Business $business, Sale $sale): string
 {
-    $sale->load(['items', 'seller']);
+    $sale->load(['items', 'customer', 'seller', 'canceledBy']);
     $business->load('owner');
 
     $payload = urlencode(json_encode([
@@ -1988,14 +2014,32 @@ function renderSaleInvoiceHtml(Business $business, Sale $sale): string
     $sellerDisplayName = $sellerIsVendor
         ? ($seller->username ?: $seller->name)
         : Str::of((string) ($seller?->name ?: 'Admin'))->trim()->explode(' ')->first();
+    $customerName = $sale->customer?->name ?: 'Client comptoir';
+    $customerPhone = $sale->customer?->phone;
+    $customerMetaText = $customerPhone
+        ? e($customerName).'<br><small>'.e($customerPhone).'</small>'
+        : e($customerName);
+    $customerMeta = '<div class="meta-card"><strong><i class="fa-solid fa-user"></i>Client</strong><br><span class="muted">'.$customerMetaText.'</span></div>';
     $sellerMeta = '<div class="meta-card"><strong><i class="fa-solid fa-user-tie"></i>Vendeur</strong><br><span class="muted">'.e($sellerDisplayName).'</span></div>';
+    $isCancelled = $sale->status === 'cancelled';
+    $cancelledByName = $sale->canceledBy
+        ? ($sale->canceledBy->username ?: $sale->canceledBy->name)
+        : '-';
+    $cancellationMeta = $isCancelled
+        ? '<div class="meta-card"><strong><i class="fa-solid fa-ban"></i>Annulé par</strong><br><span class="muted">'.e($cancelledByName).'</span></div>'
+        : '';
+    $cancellationNotice = $isCancelled
+        ? '<section class="cancellation-notice"><strong><i class="fa-solid fa-circle-exclamation"></i>Motif d’annulation :</strong><p>'.e($sale->cancellation_reason ?: '-').'</p></section>'
+        : '';
     $paymentMeta = '<section class="meta">'
+        .$customerMeta
         .$sellerMeta
+        .$cancellationMeta
         .($sale->type === 'proforma' ? '' : '<div class="meta-card"><strong><i class="fa-solid fa-wallet"></i>Mode de paiement</strong><br><span class="muted">'.e(paymentLabel($sale->payment_method)).'</span></div>')
         .'</section>';
 
     return str_replace(
-        ['__BUSINESS_HEADER__', '__DOCUMENT_TITLE__', '__SALE_NUMBER__', '__SALE_DATE__', '__PAYMENT_META__', '__SUBTOTAL__', '__DISCOUNT__', '__TOTAL__', '__ITEM_ROWS__', '__QR_IMAGE__'],
+        ['__BUSINESS_HEADER__', '__DOCUMENT_TITLE__', '__SALE_NUMBER__', '__SALE_DATE__', '__PAYMENT_META__', '__SUBTOTAL__', '__DISCOUNT__', '__TOTAL__', '__ITEM_ROWS__', '__QR_IMAGE__', '__CANCELLED_CLASS__', '__CANCELLED_WATERMARK__', '__CANCELLATION_NOTICE__'],
         [
             $branding['header_html'],
             e($documentTitle),
@@ -2007,6 +2051,9 @@ function renderSaleInvoiceHtml(Business $business, Sale $sale): string
             number_format($sale->total, 0, ',', ' ').' FCFA',
             $sale->items->map(fn ($item) => '<tr><td class="col-product">'.e($item->product_name).'</td><td class="col-qty">'.e(rtrim(rtrim(number_format((float) $item->quantity, 2, ',', ' '), '0'), ',')).'</td><td class="col-price amount">'.number_format($item->unit_price, 0, ',', ' ').' FCFA</td><td class="col-total amount">'.number_format($item->total, 0, ',', ' ').' FCFA</td></tr>')->implode(''),
             e($qrImage),
+            $isCancelled ? 'cancelled' : '',
+            $isCancelled ? '<div class="cancelled-watermark">Facture annulée</div>' : '',
+            $cancellationNotice,
         ],
         file_get_contents(resource_path('views/invoice.blade.php'))
     );
@@ -2512,9 +2559,13 @@ Route::patch('/api/businesses/{business}/services/{service}/archive', function (
         ], 422);
     }
 
-    $service->update(['status' => 'paused']);
+    $serviceId = $service->id;
+    $service->delete();
 
-    return response()->json($service->fresh());
+    return response()->json([
+        'id' => $serviceId,
+        'message' => 'Service supprimé.',
+    ]);
 });
 
 Route::patch('/api/businesses/{business}/products/{product}/price', function (Request $request, Business $business, Product $product) {
@@ -2716,7 +2767,7 @@ Route::post('/api/businesses/{business}/sales', function (Request $request, Busi
         ], 422);
     }
 
-    $sellerCanEditPrices = (bool) ($isBusinessAdmin || ($sellerPivot?->can_edit_prices ?? $seller->can_edit_prices ?? false));
+    $sellerCanEditPrices = (bool) ($isBusinessAdmin || ($isBusinessSeller && (bool) ($sellerPivot?->can_edit_prices ?? false)));
 
     $sale = DB::transaction(function () use ($request, $business, $seller, $sellerCanEditPrices, $documentType) {
         $customer = null;
@@ -3148,6 +3199,7 @@ Route::get('/businesses/{business}/exports/{type}', function (Business $business
         ->get()
         ->map(fn ($expense) => [
             $expense->name,
+            $expense->reference,
             $expense->category,
             $expense->type,
             $expense->amount,
@@ -3155,7 +3207,7 @@ Route::get('/businesses/{business}/exports/{type}', function (Business $business
             $expense->notes,
         ]);
 
-    return csvResponse('depenses.csv', ['Charge', 'Catégorie', 'Type', 'Montant', 'Date', 'Notes'], $rows);
+    return csvResponse('depenses.csv', ['Charge', 'Référence', 'Catégorie', 'Type', 'Montant', 'Date', 'Notes'], $rows);
 });
 
 Route::get('/businesses/{business}/exports/{type}/pdf', function (Business $business, string $type) {
@@ -3235,6 +3287,12 @@ function currentUserPayload(Business $business): array
         };
     }
 
+    $isBusinessAdmin = $user && ($business->owner_id === $user->id || $pivot?->role === 'admin' || ($user->role === 'admin' && $pivot?->role !== 'seller'));
+    $isBusinessSeller = $user && $business->owner_id !== $user->id && ($pivot?->role === 'seller' || $user->role === 'seller');
+    $canEditPrices = $isBusinessAdmin
+        ? true
+        : ($isBusinessSeller && (bool) ($pivot?->can_edit_prices ?? false));
+
     return [
         'id' => $user?->id,
         'name' => $user?->name ?: 'Utilisateur',
@@ -3243,7 +3301,7 @@ function currentUserPayload(Business $business): array
         'phone' => $user?->phone,
         'whatsapp_phone' => $user?->whatsapp_phone,
         'role' => $role,
-        'can_edit_prices' => (bool) ($business->owner_id === $user?->id || $pivot?->role === 'admin' || ($pivot?->can_edit_prices ?? $user?->can_edit_prices ?? false)),
+        'can_edit_prices' => (bool) $canEditPrices,
         'is_active' => (bool) $user?->is_active,
         'force_logout_message' => $user && ! $user->is_active
             ? "Votre compte a été désactivé par l'administrateur. Vous allez être déconnecté."
@@ -3279,13 +3337,13 @@ function adminPageHtml(string $section = 'dashboard'): string
             : '<form method="post" action="/admin/abonnements/'.$subscription->id.'/activer"><input type="hidden" name="_token" value="'.e($csrf).'"><button class="btn icon-btn" style="width:38px;height:38px;min-height:38px;padding:0;background:#2f7d69;color:white" type="submit" title="Activer" aria-label="Activer"><i class="fa-solid fa-check"></i></button></form>';
         $deleteAction = '<form method="post" action="/admin/abonnements/'.$subscription->id.'/supprimer" onsubmit="return confirm(\'Supprimer cet abonnement ?\')"><input type="hidden" name="_token" value="'.e($csrf).'"><button class="btn danger icon-btn" style="width:38px;height:38px;min-height:38px;padding:0" type="submit" title="Supprimer" aria-label="Supprimer"><i class="fa-solid fa-trash"></i></button></form>';
 
-        return '<tr><td><strong>'.e($business?->name ?: 'Boutique supprimée').'</strong><small>'.e($business?->owner?->email ?: '-').'</small></td><td>'.e(subscriptionPlanLabel($subscription->plan)).'</td><td>'.number_format($subscription->amount, 0, ',', ' ').' FCFA</td><td>'.e($subscription->deposit_phone ?: $subscription->payment_reference ?: '-').'</td><td>'.adminStatusBadge($subscription->status).'</td><td>'.e(optional($subscription->ends_at)->format('d/m/Y') ?: '-').'</td><td class="actions">'.$action.$deleteAction.'</td></tr>';
+        return '<tr><td><span class="table-cell-icon"><i class="fa-solid fa-store"></i></span><strong>'.e($business?->name ?: 'Boutique supprimée').'</strong><small>'.e($business?->owner?->email ?: '-').'</small></td><td><span class="table-cell-icon"><i class="fa-solid fa-box-open"></i></span>'.e(subscriptionPlanLabel($subscription->plan)).'</td><td class="money-cell"><span class="table-cell-icon"><i class="fa-solid fa-coins"></i></span>'.number_format($subscription->amount, 0, ',', ' ').' FCFA</td><td><span class="table-cell-icon"><i class="fa-solid fa-mobile-screen"></i></span>'.e($subscription->deposit_phone ?: $subscription->payment_reference ?: '-').'</td><td>'.adminStatusBadge($subscription->status).'</td><td><span class="table-cell-icon"><i class="fa-solid fa-calendar-day"></i></span>'.e(optional($subscription->ends_at)->format('d/m/Y') ?: '-').'</td><td class="actions">'.$action.$deleteAction.'</td></tr>';
     })->implode('');
 
     $businessRows = $businesses->map(function (Business $business) {
         $subscription = $business->subscriptions->first();
 
-        return '<tr><td><strong>'.e($business->name).'</strong><small>'.e($business->address ?: 'Adresse non renseignée').'</small></td><td>'.e($business->phone ?: '-').'<small>WhatsApp: '.e($business->whatsapp_phone ?: '-').'</small></td><td>'.e($business->owner?->name ?: '-').'<small>'.e($business->owner?->email ?: '-').'</small></td><td>'.($subscription ? adminStatusBadge($subscription->status) : adminStatusBadge('aucun')).'</td><td>'.number_format($business->products()->count(), 0, ',', ' ').'</td><td><a class="btn light icon-btn" style="width:38px;height:38px;min-height:38px;padding:0" href="/dashboard/'.$business->id.'" title="Ouvrir" aria-label="Ouvrir"><i class="fa-solid fa-arrow-up-right-from-square"></i></a></td></tr>';
+        return '<tr><td><span class="table-cell-icon"><i class="fa-solid fa-store"></i></span><strong>'.e($business->name).'</strong><small>'.e($business->address ?: 'Adresse non renseignée').'</small></td><td><span class="table-cell-icon"><i class="fa-solid fa-phone"></i></span>'.e($business->phone ?: '-').'<small>WhatsApp: '.e($business->whatsapp_phone ?: '-').'</small></td><td><span class="table-cell-icon"><i class="fa-solid fa-user-tie"></i></span>'.e($business->owner?->name ?: '-').'<small>'.e($business->owner?->email ?: '-').'</small></td><td>'.($subscription ? adminStatusBadge($subscription->status) : adminStatusBadge('aucun')).'</td><td><span class="table-cell-icon"><i class="fa-solid fa-boxes-stacked"></i></span>'.number_format($business->products()->count(), 0, ',', ' ').'</td><td><a class="btn light icon-btn" style="width:38px;height:38px;min-height:38px;padding:0" href="/dashboard/'.$business->id.'" title="Ouvrir" aria-label="Ouvrir"><i class="fa-solid fa-arrow-up-right-from-square"></i></a></td></tr>';
     })->implode('');
 
     $userRows = $users->map(function (User $user) use ($csrf) {
@@ -3293,7 +3351,7 @@ function adminPageHtml(string $section = 'dashboard'): string
             ? '<span class="muted">Protégé</span>'
             : '<form method="post" action="/admin/utilisateurs/'.$user->id.'/statut"><input type="hidden" name="_token" value="'.e($csrf).'"><button class="btn light icon-btn" style="width:38px;height:38px;min-height:38px;padding:0" type="submit" title="'.($user->is_active ? 'Désactiver' : 'Activer').'" aria-label="'.($user->is_active ? 'Désactiver' : 'Activer').'"><i class="fa-solid '.($user->is_active ? 'fa-user-slash' : 'fa-user-check').'"></i></button></form>';
 
-        return '<tr><td><strong>'.e($user->name).'</strong><small>'.e($user->email).'</small></td><td>'.e($user->phone ?: '-').'</td><td>'.e($user->role).'</td><td>'.adminStatusBadge($user->is_active ? 'actif' : 'inactif').'</td><td>'.e(optional($user->created_at)->format('d/m/Y') ?: '-').'</td><td class="actions">'.$action.'</td></tr>';
+        return '<tr><td><span class="table-cell-icon"><i class="fa-solid fa-user"></i></span><strong>'.e($user->name).'</strong><small>'.e($user->email).'</small></td><td><span class="table-cell-icon"><i class="fa-solid fa-phone"></i></span>'.e($user->phone ?: '-').'</td><td><span class="table-cell-icon"><i class="fa-solid fa-id-badge"></i></span>'.e($user->role).'</td><td>'.adminStatusBadge($user->is_active ? 'actif' : 'inactif').'</td><td><span class="table-cell-icon"><i class="fa-solid fa-calendar-day"></i></span>'.e(optional($user->created_at)->format('d/m/Y') ?: '-').'</td><td class="actions">'.$action.'</td></tr>';
     })->implode('');
 
     $revenueRows = collect(subscriptionPlans())->map(function ($plan, $key) {
@@ -3301,7 +3359,7 @@ function adminPageHtml(string $section = 'dashboard'): string
         $pendingCount = Subscription::query()->where('plan', $key)->whereIn('status', ['pending', 'en attente'])->count();
         $total = (int) Subscription::query()->where('plan', $key)->where('status', 'actif')->sum('amount');
 
-        return '<tr><td><strong>'.e($plan['label']).'</strong><small>'.e($plan['duration']).'</small></td><td>'.number_format($plan['amount'], 0, ',', ' ').' FCFA</td><td>'.$activeCount.'</td><td>'.$pendingCount.'</td><td>'.number_format($total, 0, ',', ' ').' FCFA</td></tr>';
+        return '<tr><td><span class="table-cell-icon"><i class="fa-solid fa-box-open"></i></span><strong>'.e($plan['label']).'</strong><small>'.e($plan['duration']).'</small></td><td class="money-cell"><span class="table-cell-icon"><i class="fa-solid fa-tag"></i></span>'.number_format($plan['amount'], 0, ',', ' ').' FCFA</td><td><span class="table-cell-icon"><i class="fa-solid fa-circle-check"></i></span>'.$activeCount.'</td><td><span class="table-cell-icon"><i class="fa-solid fa-clock"></i></span>'.$pendingCount.'</td><td class="money-cell"><span class="table-cell-icon"><i class="fa-solid fa-coins"></i></span>'.number_format($total, 0, ',', ' ').' FCFA</td></tr>';
     })->implode('');
     $settingsMessage = session('admin_settings_success')
         ? '<p class="message success"><i class="fa-solid fa-circle-check"></i>'.e(session('admin_settings_success')).'</p>'
@@ -3312,10 +3370,10 @@ function adminPageHtml(string $section = 'dashboard'): string
         : '';
 
     $content = match ($section) {
-        'abonnements' => '<section class="card"><div class="table-search"><i class="fa-solid fa-magnifying-glass"></i><input type="search" placeholder="Rechercher une boutique, une formule, un statut..." data-table-search></div><div class="table-wrap"><table><thead><tr><th>Boutique</th><th>Formule</th><th>Montant</th><th>Numéro dépôt</th><th>Statut</th><th>Fin</th><th>Actions</th></tr></thead><tbody>'.$subscriptionRows.'</tbody></table></div></section>',
-        'boutiques' => '<section class="card"><div class="section-title"><div><h2>Boutiques</h2><p>Vue globale des commerces inscrits.</p></div></div><div class="table-wrap"><table><thead><tr><th>Boutique</th><th>Contact</th><th>Propriétaire</th><th>Abonnement</th><th>Produits</th><th>Action</th></tr></thead><tbody>'.$businessRows.'</tbody></table></div></section>',
-        'utilisateurs' => '<section class="card"><div class="section-title"><div><h2>Utilisateurs</h2><p>Comptes administrateurs et accès EasyMarket.</p></div></div><div class="table-wrap"><table><thead><tr><th>Utilisateur</th><th>Téléphone</th><th>Rôle</th><th>Statut</th><th>Création</th><th>Action</th></tr></thead><tbody>'.$userRows.'</tbody></table></div></section>',
-        'revenus' => '<section class="stats">'.$revenueStatsHtml.'</section><section class="card"><div class="section-title"><div><h2>Revenus</h2><p>Revenus validés et répartition par formule.</p></div></div><div class="table-wrap"><table><thead><tr><th>Formule</th><th>Prix</th><th>Actifs</th><th>En attente</th><th>Revenus validés</th></tr></thead><tbody>'.$revenueRows.'</tbody></table></div></section>',
+        'abonnements' => '<section class="card"><div class="section-title"><div><h2><i class="fa-solid fa-credit-card"></i>Abonnements</h2><p>Demandes, validations et suspensions.</p></div></div><div class="table-search"><i class="fa-solid fa-magnifying-glass"></i><input type="search" placeholder="Rechercher une boutique, une formule, un statut..." data-table-search></div><div class="table-wrap"><table><thead><tr><th><i class="fa-solid fa-store"></i>Boutique</th><th><i class="fa-solid fa-box-open"></i>Formule</th><th><i class="fa-solid fa-coins"></i>Montant</th><th><i class="fa-solid fa-mobile-screen"></i>Numéro dépôt</th><th><i class="fa-solid fa-signal"></i>Statut</th><th><i class="fa-solid fa-calendar-day"></i>Fin</th><th><i class="fa-solid fa-screwdriver-wrench"></i>Actions</th></tr></thead><tbody>'.$subscriptionRows.'</tbody></table></div></section>',
+        'boutiques' => '<section class="card"><div class="section-title"><div><h2><i class="fa-solid fa-store"></i>Boutiques</h2><p>Vue globale des commerces inscrits.</p></div></div><div class="table-wrap"><table><thead><tr><th><i class="fa-solid fa-store"></i>Boutique</th><th><i class="fa-solid fa-phone"></i>Contact</th><th><i class="fa-solid fa-user-tie"></i>Propriétaire</th><th><i class="fa-solid fa-credit-card"></i>Abonnement</th><th><i class="fa-solid fa-boxes-stacked"></i>Produits</th><th><i class="fa-solid fa-arrow-up-right-from-square"></i>Action</th></tr></thead><tbody>'.$businessRows.'</tbody></table></div></section>',
+        'utilisateurs' => '<section class="card"><div class="section-title"><div><h2><i class="fa-solid fa-users"></i>Utilisateurs</h2><p>Comptes administrateurs et accès EasyMarket.</p></div></div><div class="table-wrap"><table><thead><tr><th><i class="fa-solid fa-user"></i>Utilisateur</th><th><i class="fa-solid fa-phone"></i>Téléphone</th><th><i class="fa-solid fa-id-badge"></i>Rôle</th><th><i class="fa-solid fa-signal"></i>Statut</th><th><i class="fa-solid fa-calendar-day"></i>Création</th><th><i class="fa-solid fa-screwdriver-wrench"></i>Action</th></tr></thead><tbody>'.$userRows.'</tbody></table></div></section>',
+        'revenus' => '<section class="stats">'.$revenueStatsHtml.'</section><section class="card"><div class="section-title"><div><h2><i class="fa-solid fa-coins"></i>Revenus</h2><p>Revenus validés et répartition par formule.</p></div></div><div class="table-wrap"><table><thead><tr><th><i class="fa-solid fa-box-open"></i>Formule</th><th><i class="fa-solid fa-tag"></i>Prix</th><th><i class="fa-solid fa-circle-check"></i>Actifs</th><th><i class="fa-solid fa-clock"></i>En attente</th><th><i class="fa-solid fa-coins"></i>Revenus validés</th></tr></thead><tbody>'.$revenueRows.'</tbody></table></div></section>',
         'parametres' => '<section class="card settings-card"><div class="section-title"><div><h2>Paramètres</h2><p>Modifiez le mot de passe du compte super admin.</p></div></div>'.$settingsMessage.$settingsErrors.'<form class="settings-form" method="post" action="/admin/parametres/mot-de-passe"><input type="hidden" name="_token" value="'.e($csrf).'"><label>Mot de passe actuel<input type="password" name="current_password" required autocomplete="current-password"></label><label>Nouveau mot de passe<input type="password" name="password" required minlength="8" autocomplete="new-password"></label><label>Confirmer le nouveau mot de passe<input type="password" name="password_confirmation" required minlength="8" autocomplete="new-password"></label><div class="form-actions"><button class="btn light" type="submit"><i class="fa-solid fa-key"></i>Modifier le mot de passe</button></div></form></section>',
         default => '<section class="stats">'.$statsHtml.'</section>',
     };
@@ -3338,7 +3396,13 @@ function adminPageHtml(string $section = 'dashboard'): string
         .adminNavLink('/admin/parametres', 'fa-gear', 'Paramètres', $section === 'parametres')
         .adminNavLink('/', 'fa-house', 'Accueil', false);
 
-    return '<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'.e($title[0]).' - EasyMarket</title><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"><style>@import url("https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800;900&display=swap");:root{--primary:#2f7d69;--dark:#10251f;--ink:#17211b;--muted:#52635b;--line:#dfe7e2;--paper:#f6faf8;--gold:#f5b84b;--danger:#b42318}*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font-family:Poppins,Arial,sans-serif}.layout{display:grid;grid-template-columns:270px 1fr;min-height:100vh}.side{background:var(--dark);color:#fff;padding:22px;position:sticky;top:0;height:100vh}.brand,.nav a,.logout button,.user-chip,.btn,.message{display:flex;align-items:center;gap:10px}.brand{font-weight:700;font-size:20px;margin-bottom:28px;text-decoration:none;color:#fff}.logo{width:38px;height:38px;border-radius:8px;display:grid;place-items:center;background:linear-gradient(135deg,var(--primary),var(--gold));color:var(--dark)}.nav{display:grid;gap:8px}.nav a,.logout button{border:0;border-radius:8px;padding:12px;background:transparent;color:rgba(255,255,255,.78);font-weight:600;text-decoration:none;cursor:pointer}.nav a.active,.nav a:hover{background:rgba(255,255,255,.12);color:#fff}.logout{margin-top:22px}.logout button{width:100%;background:var(--danger);color:#fff}.menu-toggle{display:none}.main{padding:28px}.top{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:22px}.top h1{margin:0 0 8px;font-size:42px;line-height:1}.top p{margin:0;color:var(--muted)}.user-chip{border:1px solid var(--line);border-radius:8px;background:#fff;padding:8px 12px}.user-chip i{color:var(--primary)}.user-chip strong,.user-chip span{display:block}.user-chip span{color:var(--muted);font-size:12px;font-weight:600}.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(185px,1fr));gap:14px;margin-bottom:18px}.stat,.card{background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 14px 36px rgba(16,37,31,.06)}.stat{padding:16px;display:grid;gap:7px}.stat i{color:var(--primary);font-size:22px}.stat span{color:var(--muted);font-weight:600}.stat strong{font-size:24px}.card{padding:18px;margin-bottom:18px}.section-title h2{margin:0}.section-title p{margin:4px 0 14px;color:var(--muted)}.table-search{min-height:46px;margin-bottom:14px;border:1px solid var(--line);border-radius:10px;background:#f8fcfa;display:flex;align-items:center;gap:10px;padding:0 13px}.table-search i{color:var(--primary)}.table-search input{width:100%;border:0;outline:0;background:transparent;color:var(--ink);font:inherit;font-weight:600}.table-wrap{overflow:auto;border-radius:10px}table{width:100%;min-width:900px;border-collapse:separate;border-spacing:0 8px}th,td{padding:14px 12px;text-align:left;vertical-align:middle}th{background:var(--dark);color:#fff;font-size:13px;font-weight:600;text-transform:uppercase}th:first-child{border-radius:8px 0 0 8px}th:last-child{border-radius:0 8px 8px 0}tbody tr{background:#fff;box-shadow:0 8px 20px rgba(16,37,31,.05)}td{border-top:1px solid var(--line);border-bottom:1px solid var(--line)}td:first-child{border-left:1px solid var(--line);border-radius:8px 0 0 8px}td:last-child{border-right:1px solid var(--line);border-radius:0 8px 8px 0}td small{display:block;color:var(--muted);margin-top:3px}.table-pagination{margin-top:12px;display:flex;justify-content:space-between;gap:10px;color:var(--muted);font-size:13px;font-weight:600}.table-pagination div{display:flex;gap:8px}.table-pagination button{border:1px solid var(--primary);border-radius:8px;background:var(--primary);color:#fff;padding:8px 10px;font-weight:600}.badge{display:inline-flex;border-radius:999px;padding:5px 10px;font-size:12px;font-weight:600}.ok{background:#2f7d69;color:#fff}.wait{background:#fff4d8;color:#7a4d00}.bad{background:#ffe6df;color:#a33824}.neutral{background:#eef2f0;color:#3f5048}.btn{border:0;border-radius:8px;min-height:38px;padding:9px 12px;justify-content:center;font-weight:600;cursor:pointer;text-decoration:none}.primary{background:var(--gold);color:var(--dark)}.light{background:var(--primary);border:1px solid var(--primary);color:#fff}.danger{background:var(--danger);color:#fff}.actions{display:flex;gap:8px;flex-wrap:wrap}.muted{color:var(--muted);font-weight:600}.settings-card{max-width:760px}.settings-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:18px}.settings-form label{display:grid;gap:8px;color:var(--dark);font-weight:700}.settings-form input{min-height:46px;border:1px solid var(--line);border-radius:8px;background:#f8fcfa;padding:10px 12px;color:var(--ink)}.form-actions{grid-column:1/-1;display:flex;justify-content:flex-end}.message{border-radius:8px;padding:12px 14px;margin:14px 0;font-weight:700}.message.success{background:#e8f4ef;color:#193b32;border:1px solid #bfe3d7}.message.error{background:#ffe6df;color:#8a2418;border:1px solid #ffd0c7}@media(max-width:980px){.layout{grid-template-columns:1fr}.layout:before{content:"";position:fixed;top:0;left:0;right:0;height:76px;z-index:45;background:rgba(246,250,248,.94);border-bottom:1px solid rgba(223,231,226,.9);box-shadow:0 12px 30px rgba(16,37,31,.08);backdrop-filter:blur(10px)}.menu-toggle{width:44px;height:44px;border:0;border-radius:8px;background:var(--dark);color:#fff;display:inline-flex;align-items:center;justify-content:center;position:fixed;top:14px;left:14px;z-index:60;box-shadow:0 12px 30px rgba(16,37,31,.22);font-size:18px}.side{width:min(82vw,300px);height:100vh;position:fixed;top:0;left:0;z-index:50;padding:72px 18px 18px;display:block;transform:translateX(-105%);transition:transform .22s;overflow-y:auto;box-shadow:20px 0 50px rgba(16,37,31,.22)}body.menu-open .side{transform:translateX(0)}body.menu-open .menu-toggle{background:var(--danger)}.brand{margin-bottom:18px;white-space:nowrap}.nav{display:grid;gap:8px}.nav a,.logout button{width:100%;white-space:normal}.top{flex-direction:column}.top-actions{position:fixed;top:14px;left:66px;right:14px;z-index:49;justify-content:flex-end}.user-chip{min-height:44px;max-width:100%;padding:7px 10px;box-shadow:0 12px 30px rgba(16,37,31,.12)}.user-chip strong,.user-chip span{max-width:calc(100vw - 132px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.main{padding:76px 18px 18px}}@media(max-width:640px){.stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.stat{padding:12px}.stat strong{font-size:18px}.stat span{font-size:12px}.table-wrap{overflow:visible}table,thead,tbody,tr,th,td{display:block;width:100%;min-width:0}thead{display:none}tbody tr{border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:12px}td,td:first-child,td:last-child{border-left:0;border-right:0;border-top:0;border-radius:0}td{border-bottom:1px solid var(--line);display:grid;grid-template-columns:42% 1fr;gap:10px;padding:10px 0}td:last-child{border-bottom:0}td:before{content:attr(data-label);color:var(--dark);font-weight:600}.settings-form{grid-template-columns:1fr}.form-actions{justify-content:stretch}.form-actions .btn{width:100%}}</style></head><body><button class="menu-toggle" type="button" aria-label="Ouvrir le menu" title="Menu"><i class="fa-solid fa-bars"></i></button><div class="layout"><aside class="side"><a class="brand" href="/admin"><span class="logo">EM</span><span>EasyMarket</span></a><nav class="nav">'.$nav.'</nav><form class="logout" method="post" action="/deconnexion"><input type="hidden" name="_token" value="'.e($csrf).'"><button type="submit"><i class="fa-solid fa-right-from-bracket"></i>Déconnexion</button></form></aside><main class="main"><header class="top"><div><h1>'.e($title[0]).'</h1><p>'.e($title[1]).'</p></div><div class="top-actions"><div class="user-chip"><i class="fa-solid fa-user"></i><div><strong>'.e($currentUser?->name ?: 'Utilisateur').'</strong><span>EasyMarket - Super Admin</span></div></div></div></header>'.$content.'</main></div><script>document.querySelectorAll(".table-wrap table").forEach(function(table){var headers=[].map.call(table.querySelectorAll("thead th"),function(th){return th.textContent.trim()});table.querySelectorAll("tbody tr").forEach(function(row){row.querySelectorAll("td").forEach(function(td,i){if(headers[i])td.setAttribute("data-label",headers[i])})});var wrap=table.closest(".table-wrap");if(wrap&&!wrap.nextElementSibling?.classList?.contains("table-pagination")){var count=table.querySelectorAll("tbody tr").length;var div=document.createElement("div");div.className="table-pagination";div.innerHTML="<span>"+count+" élément"+(count>=2?"s":"")+" sur 20</span><div><button disabled>Précédent</button><button disabled>Suivant</button></div>";wrap.insertAdjacentElement("afterend",div)}});document.querySelectorAll("[data-table-search]").forEach(function(input){var card=input.closest(".card");var rows=card?card.querySelectorAll("tbody tr"):[];input.addEventListener("input",function(){var term=input.value.trim().toLowerCase();rows.forEach(function(row){row.style.display=row.textContent.toLowerCase().includes(term)?"":"none"})})});var menuToggle=document.querySelector(".menu-toggle");if(menuToggle){menuToggle.addEventListener("click",function(){document.body.classList.toggle("menu-open");var open=document.body.classList.contains("menu-open");menuToggle.setAttribute("aria-label",open?"Fermer le menu":"Ouvrir le menu");menuToggle.querySelector("i").className=open?"fa-solid fa-xmark":"fa-solid fa-bars"});document.querySelectorAll(".side a").forEach(function(link){link.addEventListener("click",function(){document.body.classList.remove("menu-open");menuToggle.setAttribute("aria-label","Ouvrir le menu");menuToggle.querySelector("i").className="fa-solid fa-bars"})})}</script></body></html>';
+    $mobileBottomNav = '<nav class="mobile-bottom-nav" aria-label="Navigation mobile super admin">'
+        .'<a class="'.($section === 'boutiques' ? 'active' : '').'" href="/admin/boutiques"><i class="fa-solid fa-store"></i><span>Boutiques</span></a>'
+        .'<a class="'.($section === 'abonnements' ? 'active' : '').'" href="/admin/abonnements"><i class="fa-solid fa-credit-card"></i><span>Abonnements</span></a>'
+        .'<a class="'.($section === 'revenus' ? 'active' : '').'" href="/admin/revenus"><i class="fa-solid fa-coins"></i><span>Revenus</span></a>'
+        .'</nav>';
+
+    return '<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'.e($title[0]).' - EasyMarket</title><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"><style>@import url("https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800;900&display=swap");:root{--primary:#2f7d69;--dark:#10251f;--ink:#17211b;--muted:#52635b;--line:#dfe7e2;--paper:#f6faf8;--gold:#f5b84b;--danger:#b42318}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 0 0,rgba(245,184,75,.16),transparent 32rem),linear-gradient(135deg,#f7fbf9,#eef6f2 46%,#fbfdfb);color:var(--ink);font-family:Poppins,Arial,sans-serif}.layout{display:grid;grid-template-columns:270px 1fr;min-height:100vh}.side{background:linear-gradient(160deg,#10251f,#173f34 58%,#10251f);color:#fff;padding:22px;position:sticky;top:0;height:100vh;box-shadow:18px 0 50px rgba(16,37,31,.16)}.brand,.nav a,.logout button,.user-chip,.btn,.message{display:flex;align-items:center;gap:10px}.brand{font-weight:700;font-size:20px;margin-bottom:28px;text-decoration:none;color:#fff}.logo{width:38px;height:38px;border-radius:8px;display:grid;place-items:center;background:linear-gradient(135deg,var(--primary),var(--gold));color:var(--dark)}.nav{display:grid;gap:8px}.nav a,.logout button{border:0;border-radius:8px;padding:12px;background:transparent;color:rgba(255,255,255,.78);font-weight:600;text-decoration:none;cursor:pointer}.nav a.active,.nav a:hover{background:rgba(255,255,255,.14);color:#fff;box-shadow:inset 3px 0 0 var(--gold)}.logout{margin-top:22px}.logout button{width:100%;background:var(--danger);color:#fff}.menu-toggle,.mobile-bottom-nav{display:none}.main{padding:28px}.top{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:22px;background:rgba(255,255,255,.78);border:1px solid rgba(223,231,226,.9);border-radius:14px;padding:20px;box-shadow:0 14px 36px rgba(16,37,31,.08)}.top h1{margin:0 0 8px;font-size:42px;line-height:1}.top p{margin:0;color:var(--muted)}.user-chip{border:1px solid var(--line);border-radius:8px;background:#fff;padding:8px 12px}.user-chip i{color:var(--primary);background:#e8f4ef;border-radius:8px;width:32px;height:32px;display:grid;place-items:center}.user-chip strong,.user-chip span{display:block}.user-chip span{color:var(--muted);font-size:12px;font-weight:600}.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(185px,1fr));gap:14px;margin-bottom:18px}.stat,.card{background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 14px 36px rgba(16,37,31,.08)}.stat{padding:16px;display:grid;gap:7px;position:relative;overflow:hidden}.stat:after{content:"";position:absolute;right:-28px;bottom:-38px;width:92px;height:92px;border-radius:50%;background:rgba(47,125,105,.12)}.stat i{width:38px;height:38px;border-radius:11px;background:#e8f4ef;color:var(--primary);display:grid;place-items:center;font-size:18px}.stat span{color:var(--muted);font-weight:600}.stat strong{font-size:24px;color:var(--dark)}.card{padding:18px;margin-bottom:18px}.section-title h2{margin:0;display:flex;align-items:center;gap:10px}.section-title h2 i{width:38px;height:38px;border-radius:11px;background:#e8f4ef;color:var(--primary);display:grid;place-items:center;font-size:17px}.section-title p{margin:4px 0 14px;color:var(--muted)}.table-search{min-height:46px;margin-bottom:14px;border:1px solid var(--line);border-radius:10px;background:#f8fcfa;display:flex;align-items:center;gap:10px;padding:0 13px}.table-search i{color:var(--primary)}.table-search input{width:100%;border:0;outline:0;background:transparent;color:var(--ink);font:inherit;font-weight:600}.table-wrap{overflow:auto;border-radius:14px;background:linear-gradient(#f8fcfa,#eef7f3);border:1px solid rgba(205,219,212,.9);padding:8px}table{width:100%;min-width:900px;border-collapse:separate;border-spacing:0 10px}th,td{padding:14px 12px;text-align:left;vertical-align:middle}th{background:linear-gradient(135deg,#10251f,#193b32);color:#fff;font-size:13px;font-weight:700;text-transform:uppercase;white-space:nowrap}th i{color:var(--gold);margin-right:7px}th:first-child{border-radius:10px 0 0 10px}th:last-child{border-radius:0 10px 10px 0}tbody tr{background:#fff;box-shadow:0 8px 20px rgba(16,37,31,.06);transition:transform .18s,box-shadow .18s}tbody tr:hover{transform:translateY(-1px);box-shadow:0 14px 32px rgba(16,37,31,.12)}td{border-top:1px solid var(--line);border-bottom:1px solid var(--line)}td:first-child{border-left:1px solid var(--line);border-radius:10px 0 0 10px}td:last-child{border-right:1px solid var(--line);border-radius:0 10px 10px 0}td small{display:block;color:var(--muted);margin-top:3px;font-weight:600}.table-cell-icon{width:28px;height:28px;color:var(--primary);background:#eef7f3;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;margin-right:8px;font-size:12px;vertical-align:middle}.money-cell{font-weight:800;color:#13723b}.table-pagination{margin-top:12px;display:flex;justify-content:space-between;gap:10px;color:var(--muted);font-size:13px;font-weight:600}.table-pagination div{display:flex;gap:8px}.table-pagination button{border:1px solid var(--primary);border-radius:8px;background:var(--primary);color:#fff;padding:8px 10px;font-weight:600}.badge{display:inline-flex;border-radius:999px;padding:5px 10px;font-size:12px;font-weight:700}.ok{background:#e8f8ef;color:#15803d}.wait{background:#fff4d8;color:#7a4d00}.bad{background:#ffe6df;color:#a33824}.neutral{background:#eef2f0;color:#3f5048}.btn{border:0;border-radius:8px;min-height:38px;padding:9px 12px;justify-content:center;font-weight:600;cursor:pointer;text-decoration:none}.primary{background:var(--gold);color:var(--dark)}.light{background:var(--primary);border:1px solid var(--primary);color:#fff}.danger{background:var(--danger);color:#fff}.actions{display:flex;gap:8px;flex-wrap:wrap}.muted{color:var(--muted);font-weight:600}.settings-card{max-width:760px}.settings-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:18px}.settings-form label{display:grid;gap:8px;color:var(--dark);font-weight:700}.settings-form input{min-height:46px;border:1px solid var(--line);border-radius:8px;background:#f8fcfa;padding:10px 12px;color:var(--ink)}.form-actions{grid-column:1/-1;display:flex;justify-content:flex-end}.message{border-radius:8px;padding:12px 14px;margin:14px 0;font-weight:700}.message.success{background:#e8f4ef;color:#193b32;border:1px solid #bfe3d7}.message.error{background:#ffe6df;color:#8a2418;border:1px solid #ffd0c7}@media(max-width:980px){.layout{grid-template-columns:1fr}.layout:before{content:"";position:fixed;top:0;left:0;right:0;height:76px;z-index:45;background:rgba(246,250,248,.94);border-bottom:1px solid rgba(223,231,226,.9);box-shadow:0 12px 30px rgba(16,37,31,.08);backdrop-filter:blur(10px)}.menu-toggle{width:44px;height:44px;border:0;border-radius:8px;background:var(--dark);color:#fff;display:inline-flex;align-items:center;justify-content:center;position:fixed;top:14px;left:14px;z-index:60;box-shadow:0 12px 30px rgba(16,37,31,.22);font-size:18px}.side{width:min(82vw,300px);height:100vh;position:fixed;top:0;left:0;z-index:50;padding:72px 18px 18px;display:block;transform:translateX(-105%);transition:transform .22s;overflow-y:auto;box-shadow:20px 0 50px rgba(16,37,31,.22)}body.menu-open .side{transform:translateX(0)}body.menu-open .menu-toggle{background:var(--danger)}.brand{margin-bottom:18px;white-space:nowrap}.nav{display:grid;gap:8px}.nav a,.logout button{width:100%;white-space:normal}.top{flex-direction:column;padding:16px}.top h1{font-size:32px}.top-actions{position:fixed;top:14px;left:66px;right:14px;z-index:49;justify-content:flex-end}.user-chip{min-height:44px;max-width:100%;padding:7px 10px;box-shadow:0 12px 30px rgba(16,37,31,.12)}.user-chip strong,.user-chip span{max-width:calc(100vw - 132px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.main{padding:76px 18px calc(98px + env(safe-area-inset-bottom))}.mobile-bottom-nav{position:fixed;left:0;right:0;bottom:0;z-index:58;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;padding:8px 10px calc(8px + env(safe-area-inset-bottom));background:rgba(251,253,251,.96);border-top:1px solid var(--line);box-shadow:0 -12px 32px rgba(16,37,31,.16);backdrop-filter:blur(12px)}.mobile-bottom-nav a{min-height:58px;color:var(--muted);display:grid;justify-items:center;align-content:center;gap:4px;border-radius:12px;text-align:center;text-decoration:none;font-size:11px;font-weight:800}.mobile-bottom-nav a i{width:30px;height:30px;border-radius:10px;background:#eef7f3;color:var(--primary);display:grid;place-items:center}.mobile-bottom-nav a.active{color:var(--dark);background:#eef7f3}.mobile-bottom-nav a.active i{background:var(--primary);color:#fff}}@media(max-width:640px){.stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.stat{padding:12px}.stat strong{font-size:18px}.stat span{font-size:12px}.table-wrap{overflow:visible}table,thead,tbody,tr,th,td{display:block;width:100%;min-width:0}thead{display:none}tbody tr{border:1px solid var(--line);border-radius:14px;padding:10px 12px;margin-bottom:12px;box-shadow:0 12px 28px rgba(16,37,31,.1)}td,td:first-child,td:last-child{border-left:0;border-right:0;border-top:0;border-radius:0}td{border-bottom:1px solid var(--line);display:grid;grid-template-columns:42% minmax(0,1fr);gap:10px;padding:10px 0}td:last-child{border-bottom:0}td:before{content:attr(data-label);color:var(--dark);font-weight:800}.settings-form{grid-template-columns:1fr}.form-actions{justify-content:stretch}.form-actions .btn{width:100%}}</style></head><body><button class="menu-toggle" type="button" aria-label="Ouvrir le menu" title="Menu"><i class="fa-solid fa-bars"></i></button><div class="layout"><aside class="side"><a class="brand" href="/admin"><span class="logo">EM</span><span>EasyMarket</span></a><nav class="nav">'.$nav.'</nav><form class="logout" method="post" action="/deconnexion"><input type="hidden" name="_token" value="'.e($csrf).'"><button type="submit"><i class="fa-solid fa-right-from-bracket"></i>Déconnexion</button></form></aside><main class="main"><header class="top"><div><h1>'.e($title[0]).'</h1><p>'.e($title[1]).'</p></div><div class="top-actions"><div class="user-chip"><i class="fa-solid fa-user"></i><div><strong>'.e($currentUser?->name ?: 'Utilisateur').'</strong><span>EasyMarket - Super Admin</span></div></div></div></header>'.$content.'</main></div>'.$mobileBottomNav.'<script>document.querySelectorAll(".table-wrap table").forEach(function(table){var headers=[].map.call(table.querySelectorAll("thead th"),function(th){return th.textContent.trim()});table.querySelectorAll("tbody tr").forEach(function(row){row.querySelectorAll("td").forEach(function(td,i){if(headers[i])td.setAttribute("data-label",headers[i])})});var wrap=table.closest(".table-wrap");if(wrap&&!wrap.nextElementSibling?.classList?.contains("table-pagination")){var count=table.querySelectorAll("tbody tr").length;var div=document.createElement("div");div.className="table-pagination";div.innerHTML="<span>"+count+" élément"+(count>=2?"s":"")+" sur 20</span><div><button disabled>Précédent</button><button disabled>Suivant</button></div>";wrap.insertAdjacentElement("afterend",div)}});document.querySelectorAll("[data-table-search]").forEach(function(input){var card=input.closest(".card");var rows=card?card.querySelectorAll("tbody tr"):[];input.addEventListener("input",function(){var term=input.value.trim().toLowerCase();rows.forEach(function(row){row.style.display=row.textContent.toLowerCase().includes(term)?"":"none"})})});var menuToggle=document.querySelector(".menu-toggle");if(menuToggle){menuToggle.addEventListener("click",function(){document.body.classList.toggle("menu-open");var open=document.body.classList.contains("menu-open");menuToggle.setAttribute("aria-label",open?"Fermer le menu":"Ouvrir le menu");menuToggle.querySelector("i").className=open?"fa-solid fa-xmark":"fa-solid fa-bars"});document.querySelectorAll(".side a").forEach(function(link){link.addEventListener("click",function(){document.body.classList.remove("menu-open");menuToggle.setAttribute("aria-label","Ouvrir le menu");menuToggle.querySelector("i").className="fa-solid fa-bars"})})}</script></body></html>';
 }
 
 function adminNavLink(string $href, string $icon, string $label, bool $active): string
@@ -3538,13 +3602,14 @@ function exportDataset(Business $business, string $type): array
 
     return [
         'title' => 'Rapport charges',
-        'headers' => ['Charge', 'Catégorie', 'Type', 'Montant', 'Date', 'Notes'],
+        'headers' => ['Charge', 'Référence', 'Catégorie', 'Type', 'Montant', 'Date', 'Notes'],
         'rows' => Expense::query()
             ->where('business_id', $business->id)
             ->latest('spent_on')
             ->get()
             ->map(fn ($expense) => [
                 $expense->name,
+                $expense->reference,
                 $expense->category,
                 $expense->type,
                 $expense->amount,
@@ -3566,7 +3631,7 @@ function printableDatasetResponse(Business $business, string $title, array $head
         $bodyRows = '<tr><td colspan="'.count($headers).'">Aucune donnée disponible.</td></tr>';
     }
 
-    $html = '<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'.e($title).' - EasyMarket</title><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"><style>@import url("https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800;900&display=swap");:root{--primary:'.e($branding['primary_color']).';--accent:'.e($branding['secondary_color']).';--ink:#17211b;--muted:#3f5048;--line:#dfe7e2;--paper:#f6faf8}*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font-family:Poppins,Arial,sans-serif}.toolbar{position:sticky;top:0;background:var(--primary);color:white;padding:12px 20px;display:flex;justify-content:space-between;gap:12px}.toolbar strong,.btn,h2{display:inline-flex;align-items:center;gap:8px}.btn{border:0;border-radius:8px;background:var(--accent);color:white;padding:10px 14px;font-weight:700}.sheet{width:min(1040px,calc(100% - 24px));min-height:calc(100vh - 48px);margin:24px auto;background:white;border:1px solid var(--line);border-radius:10px;padding:34px;box-shadow:0 20px 55px rgba(25,59,50,.12);display:flex;flex-direction:column}.head{border-bottom:2px solid var(--primary);padding-bottom:18px;margin-bottom:20px}.doc-brand{display:flex;align-items:flex-start;gap:14px}.doc-brand img,.doc-logo{width:62px;height:62px;object-fit:contain;border:1px solid var(--line);border-radius:8px;padding:5px}.doc-logo{display:grid;place-items:center;background:linear-gradient(135deg,var(--primary),var(--accent));color:white;font-size:24px}.doc-brand h1{margin:0 0 6px}.doc-brand p{margin:2px 0;color:var(--muted)}.doc-detail{display:flex;align-items:center;gap:12px}.doc-detail i{width:18px;text-align:center;flex:0 0 18px}.doc-detail i,h2 i,th i,.footer i{color:var(--primary)}h2{margin:0 0 14px}table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid var(--line);padding:10px 8px;text-align:left;vertical-align:top}th{color:var(--primary);font-size:13px}.footer{margin-top:auto;padding-top:14px;border-top:1px solid var(--line);color:var(--muted);text-align:center;font-size:12px;display:flex;align-items:center;justify-content:center;gap:7px}@media print{body{background:white}.toolbar{display:none}.sheet{width:100%;min-height:100vh;margin:0;border:0;box-shadow:none;border-radius:0}}</style></head><body><div class="toolbar"><strong><i class="fa-solid fa-file-pdf"></i>'.e($title).'</strong><button class="btn" onclick="window.print()"><i class="fa-solid fa-print"></i>Imprimer / PDF</button></div><main class="sheet"><section class="head">'.$branding['header_html'].'</section><h2><i class="fa-solid fa-table"></i>'.e($title).'</h2><table><thead><tr>'.$headerCells.'</tr></thead><tbody>'.$bodyRows.'</tbody></table><p class="footer"><i class="fa-solid fa-circle-check"></i>Document généré par l\'application EasyMarket.</p></main></body></html>';
+    $html = '<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'.e($title).' - EasyMarket</title><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"><style>@import url("https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800;900&display=swap");:root{--primary:'.e($branding['primary_color']).';--accent:'.e($branding['secondary_color']).';--ink:#17211b;--muted:#3f5048;--line:#dfe7e2;--paper:#f6faf8}*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font-family:Poppins,Arial,sans-serif}.toolbar{position:sticky;top:0;background:var(--primary);color:white;padding:12px 20px;display:flex;justify-content:space-between;gap:12px}.toolbar strong,.btn,h2{display:inline-flex;align-items:center;gap:8px}.btn{border:0;border-radius:8px;background:var(--accent);color:white;padding:10px 14px;font-weight:700}.sheet{width:min(1040px,calc(100% - 24px));min-height:calc(100vh - 48px);margin:24px auto;background:white;border:1px solid var(--line);border-radius:10px;padding:34px;box-shadow:0 20px 55px rgba(25,59,50,.12);display:flex;flex-direction:column}.head{border-bottom:2px solid var(--primary);padding-bottom:18px;margin-bottom:20px}.doc-brand{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:start;gap:14px}.doc-brand-content{min-width:0}.doc-brand img,.doc-logo{width:62px;height:62px;object-fit:contain;border:1px solid var(--line);border-radius:8px;padding:5px}.doc-logo{display:grid;place-items:center;background:linear-gradient(135deg,var(--primary),var(--accent));color:white;font-size:24px}.doc-brand h1{margin:2px 0 10px;font-size:32px;line-height:1.08}.doc-brand p{margin:3px 0;color:var(--muted)}.doc-detail{display:grid;grid-template-columns:20px minmax(0,1fr);align-items:center;gap:10px}.doc-detail i{width:20px;text-align:center}.doc-detail i,h2 i,th i,.footer i{color:var(--primary)}h2{margin:0 0 14px}table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid var(--line);padding:10px 8px;text-align:left;vertical-align:top}th{color:var(--primary);font-size:13px}.footer{margin-top:auto;padding-top:14px;border-top:1px solid var(--line);color:var(--muted);text-align:center;font-size:12px;display:flex;align-items:center;justify-content:center;gap:7px}@media print{body{background:white}.toolbar{display:none}.sheet{width:100%;min-height:100vh;margin:0;border:0;box-shadow:none;border-radius:0}}</style></head><body><div class="toolbar"><strong><i class="fa-solid fa-file-pdf"></i>'.e($title).'</strong><button class="btn" onclick="window.print()"><i class="fa-solid fa-print"></i>Imprimer / PDF</button></div><main class="sheet"><section class="head">'.$branding['header_html'].'</section><h2><i class="fa-solid fa-table"></i>'.e($title).'</h2><table><thead><tr>'.$headerCells.'</tr></thead><tbody>'.$bodyRows.'</tbody></table><p class="footer"><i class="fa-solid fa-circle-check"></i>Document généré par l\'application EasyMarket.</p></main></body></html>';
 
     return response($html)->header('Content-Type', 'text/html; charset=UTF-8');
 }
@@ -3622,7 +3687,7 @@ function plannedSubscriptionEnd(string $plan, $start = null)
     return match ($plan) {
         'monthly' => $date->addMonth(),
         'yearly' => $date->addYear(),
-        'lifetime' => $date->addYears(100),
+        'lifetime' => $date->addYears(99),
         default => $date->addMonth(),
     };
 }
@@ -3740,7 +3805,7 @@ function documentBranding(Business $business, array $options = []): array
     return [
         'primary_color' => documentColor($business->primary_color, '#193b32'),
         'secondary_color' => documentColor($business->secondary_color, '#f5b84b'),
-        'header_html' => '<div class="doc-brand">'.$logoHtml.'<div><h1>'.e($business->name).'</h1>'.$descriptionHtml.$detailsHtml.'</div></div>',
+        'header_html' => '<div class="doc-brand">'.$logoHtml.'<div class="doc-brand-content"><h1>'.e($business->name).'</h1>'.$descriptionHtml.$detailsHtml.'</div></div>',
     ];
 }
 
@@ -3848,7 +3913,7 @@ function fullTaxDocumentsHtml(Business $business, $start, $end, callable $money)
         ->where('business_id', $business->id)
         ->where('status', 'completed')
         ->whereBetween('sold_at', [$start, $end])
-        ->with(['customer:id,name,phone', 'seller:id,name,username'])
+        ->with(['items', 'customer:id,name,phone', 'seller:id,name,username'])
         ->oldest('sold_at')
         ->get();
     $expenses = Expense::query()
@@ -3887,13 +3952,38 @@ function fullTaxDocumentsHtml(Business $business, $start, $end, callable $money)
     ];
     $status = fn ($value) => $statusLabels[$value] ?? (string) $value;
     $empty = fn (int $colspan, string $message) => '<tr><td colspan="'.$colspan.'">'.e($message).'</td></tr>';
+    $summary = fn (array $items) => '<div class="tax-summary-grid">'.collect($items)->map(fn ($item) => '<div><span>'.e($item[0]).'</span><strong>'.e($item[1]).'</strong></div>')->implode('').'</div>';
 
-    $salesRows = $sales->map(fn ($sale) => '<tr><td>'.e(optional($sale->sold_at)->format('d/m/Y H:i')).'</td><td>'.e($sale->number).'</td><td>'.e($sale->customer?->name ?: '-').'</td><td>'.e($sale->seller?->username ?: $sale->seller?->name ?: '-').'</td><td>'.e($paymentLabels[$sale->payment_method] ?? $sale->payment_method).'</td><td>'.$money($sale->total).'</td></tr>')->implode('')
-        ?: $empty(6, 'Aucune recette sur la période.');
+    $productSalesTotal = (int) $sales->sum(fn ($sale) => $sale->items->whereNotNull('product_id')->sum('total'));
+    $serviceSalesTotal = (int) $sales->sum(fn ($sale) => $sale->items->whereNull('product_id')->sum('total'));
+    $salesItemsCount = (int) $sales->sum(fn ($sale) => $sale->items->count());
+    $salesQuantityTotal = (float) $sales->sum(fn ($sale) => $sale->items->sum('quantity'));
+    $salesTotal = (int) $sales->sum('total');
+    $expensesTotal = (int) $expenses->sum('amount');
+    $receivablesDueTotal = (int) $receivables->sum('amount_due');
+    $receivablesPaidTotal = (int) $receivables->sum('amount_paid');
+    $receivablesRemainingTotal = max(0, $receivablesDueTotal - $receivablesPaidTotal);
+    $debtsDueTotal = (int) $supplierDebts->sum('amount_due');
+    $debtsPaidTotal = (int) $supplierDebts->sum('amount_paid');
+    $debtsRemainingTotal = max(0, $debtsDueTotal - $debtsPaidTotal);
+    $payrollGrossTotal = (int) $payrolls->sum('gross_salary');
+    $payrollAdvanceTotal = (int) $payrolls->sum('salary_advance');
+    $payrollNetTotal = (int) $payrolls->sum('net_salary');
+
+    $salesRows = $sales->map(function ($sale) use ($paymentLabels, $money) {
+        $hasProducts = $sale->items->whereNotNull('product_id')->isNotEmpty();
+        $hasServices = $sale->items->whereNull('product_id')->isNotEmpty();
+        $saleNature = $hasProducts && $hasServices
+            ? 'Produits et services'
+            : ($hasServices ? 'Services' : 'Produits');
+
+        return '<tr><td>'.e(optional($sale->sold_at)->format('d/m/Y H:i')).'</td><td>'.e($sale->number).'</td><td>'.e($sale->customer?->name ?: '-').'</td><td>'.e($sale->seller?->username ?: $sale->seller?->name ?: '-').'</td><td>'.e($saleNature).'</td><td>'.e($paymentLabels[$sale->payment_method] ?? $sale->payment_method).'</td><td>'.$money($sale->total).'</td></tr>';
+    })->implode('')
+        ?: $empty(7, 'Aucune recette sur la période.');
     $expenseRows = $expenses->map(fn ($expense) => '<tr><td>'.e(optional($expense->spent_on)->format('d/m/Y')).'</td><td>'.e($expense->name).'</td><td>'.e($expense->category ?: '-').'</td><td>'.$money($expense->amount).'</td></tr>')->implode('')
         ?: $empty(4, 'Aucune dépense sur la période.');
-    $journalRows = $sales->map(fn ($sale) => '<tr><td>'.e(optional($sale->sold_at)->format('d/m/Y H:i')).'</td><td>'.e($sale->number).'</td><td>'.e($sale->customer?->name ?: '-').'</td><td>'.e($paymentLabels[$sale->payment_method] ?? $sale->payment_method).'</td><td>'.$money($sale->subtotal).'</td><td>'.$money($sale->discount).'</td><td>'.$money($sale->total).'</td></tr>')->implode('')
-        ?: $empty(7, 'Aucune vente validée sur la période.');
+    $journalRows = $sales->flatMap(fn ($sale) => $sale->items->map(fn ($item) => '<tr><td>'.e(optional($sale->sold_at)->format('d/m/Y H:i')).'</td><td>'.e($sale->number).'</td><td>'.e($sale->customer?->name ?: '-').'</td><td>'.e($item->product_id ? 'Produit' : 'Service').'</td><td>'.e($item->product_name).'</td><td>'.e(rtrim(rtrim(number_format((float) $item->quantity, 2, ',', ' '), '0'), ',')).'</td><td>'.$money($item->unit_price).'</td><td>'.$money($item->total).'</td><td>'.e($paymentLabels[$sale->payment_method] ?? $sale->payment_method).'</td></tr>'))->implode('')
+        ?: $empty(9, 'Aucune vente validée sur la période.');
     $receivableRows = $receivables->map(fn ($item) => '<tr><td>Client</td><td>'.e($item->customer?->name ?: '-').'</td><td>'.e($item->customer?->phone ?: '-').'</td><td>'.$money($item->amount_due).'</td><td>'.$money($item->amount_paid).'</td><td>'.$money(max(0, $item->amount_due - $item->amount_paid)).'</td><td>'.e(optional($item->due_date)->format('d/m/Y') ?: '-').'</td><td>'.e($status($item->status)).'</td></tr>')->implode('');
     $debtRows = $supplierDebts->map(fn ($item) => '<tr><td>Fournisseur</td><td>'.e($item->supplier?->name ?: '-').'</td><td>'.e($item->supplier?->phone ?: '-').'</td><td>'.$money($item->amount_due).'</td><td>'.$money($item->amount_paid).'</td><td>'.$money(max(0, $item->amount_due - $item->amount_paid)).'</td><td>'.e(optional($item->due_date)->format('d/m/Y') ?: '-').'</td><td>'.e($status($item->status)).'</td></tr>')->implode('');
     $balanceRows = ($receivableRows.$debtRows) ?: $empty(8, 'Aucune créance ni dette fournisseur enregistrée.');
@@ -3903,23 +3993,28 @@ function fullTaxDocumentsHtml(Business $business, $start, $end, callable $money)
     return '
         <section class="tax-detail-section">
             <h2><i class="fa-solid fa-receipt"></i>Rapport des recettes</h2>
-            <table><thead><tr><th>Date</th><th>Facture</th><th>Client</th><th>Vendeur</th><th>Paiement</th><th>Total</th></tr></thead><tbody>'.$salesRows.'</tbody></table>
+            '.$summary([['Factures', number_format($sales->count(), 0, ',', ' ')], ['Lignes vendues', number_format($salesItemsCount, 0, ',', ' ')], ['Produits', $money($productSalesTotal)], ['Services', $money($serviceSalesTotal)]]).'
+            <table><thead><tr><th>Date</th><th>Facture</th><th>Client</th><th>Vendeur</th><th>Nature</th><th>Paiement</th><th>Total</th></tr></thead><tbody>'.$salesRows.'</tbody><tfoot><tr><td colspan="6">Total recettes</td><td>'.$money($salesTotal).'</td></tr></tfoot></table>
         </section>
         <section class="tax-detail-section">
             <h2><i class="fa-solid fa-money-bill-wave"></i>Rapport des dépenses détaillées</h2>
-            <table><thead><tr><th>Date</th><th>Charge</th><th>Catégorie</th><th>Montant</th></tr></thead><tbody>'.$expenseRows.'</tbody></table>
+            '.$summary([['Dépenses', number_format($expenses->count(), 0, ',', ' ')], ['Catégories', number_format($expenses->pluck('category')->filter()->unique()->count(), 0, ',', ' ')], ['Total dépenses', $money($expensesTotal)], ['Moyenne', $money($expenses->count() ? $expensesTotal / $expenses->count() : 0)] ]).'
+            <table><thead><tr><th>Date</th><th>Charge</th><th>Catégorie</th><th>Montant</th></tr></thead><tbody>'.$expenseRows.'</tbody><tfoot><tr><td colspan="3">Total dépenses</td><td>'.$money($expensesTotal).'</td></tr></tfoot></table>
         </section>
         <section class="tax-detail-section">
             <h2><i class="fa-solid fa-book"></i>Journal des ventes</h2>
-            <table><thead><tr><th>Date</th><th>Facture</th><th>Client</th><th>Paiement</th><th>Sous-total</th><th>Remise</th><th>Total</th></tr></thead><tbody>'.$journalRows.'</tbody></table>
+            '.$summary([['Lignes', number_format($salesItemsCount, 0, ',', ' ')], ['Quantité totale', rtrim(rtrim(number_format($salesQuantityTotal, 2, ',', ' '), '0'), ',')], ['Total ventes', $money($salesTotal)] ]).'
+            <table><thead><tr><th>Date</th><th>Facture</th><th>Client</th><th>Nature</th><th>Désignation</th><th>Qté</th><th>PU</th><th>Total ligne</th><th>Paiement</th></tr></thead><tbody>'.$journalRows.'</tbody><tfoot><tr><td colspan="7">Total journal des ventes</td><td>'.$money($salesTotal).'</td><td></td></tr></tfoot></table>
         </section>
         <section class="tax-detail-section">
             <h2><i class="fa-solid fa-scale-balanced"></i>Bilan des créances clients et dettes fournisseurs</h2>
-            <table><thead><tr><th>Type</th><th>Nom</th><th>Téléphone</th><th>Montant dû</th><th>Payé</th><th>Reste</th><th>Échéance</th><th>Statut</th></tr></thead><tbody>'.$balanceRows.'</tbody></table>
+            '.$summary([['Créances restantes', $money($receivablesRemainingTotal)], ['Créances payées', $money($receivablesPaidTotal)], ['Dettes restantes', $money($debtsRemainingTotal)], ['Dettes payées', $money($debtsPaidTotal)] ]).'
+            <table><thead><tr><th>Type</th><th>Nom</th><th>Téléphone</th><th>Montant dû</th><th>Payé</th><th>Reste</th><th>Échéance</th><th>Statut</th></tr></thead><tbody>'.$balanceRows.'</tbody><tfoot><tr><td colspan="3">Totaux</td><td>'.$money($receivablesDueTotal + $debtsDueTotal).'</td><td>'.$money($receivablesPaidTotal + $debtsPaidTotal).'</td><td>'.$money($receivablesRemainingTotal + $debtsRemainingTotal).'</td><td></td><td></td></tr></tfoot></table>
         </section>
         <section class="tax-detail-section">
             <h2><i class="fa-solid fa-file-invoice-dollar"></i>Fiches de paie du personnel</h2>
-            <table><thead><tr><th>Période</th><th>Employé</th><th>Brut</th><th>Avances</th><th>Net</th><th>Statut</th></tr></thead><tbody>'.$payrollRows.'</tbody></table>
+            '.$summary([['Fiches', number_format($payrolls->count(), 0, ',', ' ')], ['Brut', $money($payrollGrossTotal)], ['Avances', $money($payrollAdvanceTotal)], ['Net payé', $money($payrollNetTotal)] ]).'
+            <table><thead><tr><th>Période</th><th>Employé</th><th>Brut</th><th>Avances</th><th>Net</th><th>Statut</th></tr></thead><tbody>'.$payrollRows.'</tbody><tfoot><tr><td colspan="2">Totaux paie</td><td>'.$money($payrollGrossTotal).'</td><td>'.$money($payrollAdvanceTotal).'</td><td>'.$money($payrollNetTotal).'</td><td></td></tr></tfoot></table>
         </section>
     ';
 }

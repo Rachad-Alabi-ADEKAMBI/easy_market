@@ -14,13 +14,14 @@
         .btn { border: 0; border-radius: 8px; padding: 10px 14px; background: var(--accent); color: white; font-weight: 600; cursor: pointer; display: inline-flex; gap: 8px; align-items: center; }
         .sheet { width: min(960px, calc(100% - 24px)); min-height: calc(100vh - 48px); margin: 24px auto; background: white; border: 1px solid var(--line); border-radius: 10px; padding: 34px; box-shadow: 0 20px 55px rgba(25,59,50,.12); display: flex; flex-direction: column; }
         .head { border-bottom: 2px solid var(--primary); padding-bottom: 18px; display: flex; justify-content: space-between; gap: 20px; }
-        .doc-brand { display: flex; align-items: flex-start; gap: 14px; }
+        .doc-brand { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 14px; }
+        .doc-brand-content { min-width: 0; }
         .doc-brand img, .doc-logo { width: 62px; height: 62px; object-fit: contain; border: 1px solid var(--line); border-radius: 8px; padding: 5px; }
         .doc-logo { display: grid; place-items: center; background: linear-gradient(135deg, var(--primary), var(--accent)); color: white; font-size: 24px; }
-        .doc-brand h1 { margin-bottom: 6px; }
-        .doc-brand p { margin: 2px 0; }
-        .doc-detail { display: flex; align-items: center; gap: 12px; }
-        .doc-detail i { width: 18px; text-align: center; flex: 0 0 18px; }
+        .doc-brand h1 { margin: 2px 0 10px; font-size: 32px; line-height: 1.08; }
+        .doc-brand p { margin: 3px 0; }
+        .doc-detail { display: grid; grid-template-columns: 20px minmax(0, 1fr); align-items: center; gap: 10px; }
+        .doc-detail i { width: 20px; text-align: center; }
         .doc-meta { text-align: right; color: var(--muted); font-weight: 700; }
         h1, h2, p { margin-top: 0; }
         h2, th, .doc-meta { align-items: center; gap: 8px; }

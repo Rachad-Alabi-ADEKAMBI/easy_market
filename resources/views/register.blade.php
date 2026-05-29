@@ -133,6 +133,7 @@
         .fields { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
         label { display: grid; gap: 7px; font-weight: 600; font-size: 14px; }
         .label-text { display: inline-flex; align-items: center; gap: 3px; }
+        .field-help { color: var(--muted); font-size: 12px; font-weight: 500; }
         .required { color: #b42318; font-weight: 500; }
         input, select, textarea {
             width: 100%;
@@ -141,6 +142,34 @@
             padding: 11px 12px;
             color: var(--ink);
             background: white;
+        }
+        .password-field {
+            position: relative;
+            display: block;
+        }
+        .password-field input {
+            padding-right: 48px;
+        }
+        .password-toggle {
+            position: absolute;
+            top: 50%;
+            right: 6px;
+            width: 38px;
+            height: 38px;
+            transform: translateY(-50%);
+            border: 0;
+            border-radius: 8px;
+            display: inline-grid;
+            place-items: center;
+            background: transparent;
+            color: var(--muted);
+            cursor: pointer;
+        }
+        .password-toggle:hover,
+        .password-toggle:focus {
+            background: var(--mint-100);
+            color: var(--primary-800);
+            outline: none;
         }
         .phone-field {
             display: grid;
@@ -189,6 +218,66 @@
         }
         .whatsapp-help i { color: #25d366; font-size: 18px; }
         .whatsapp-help strong { color: var(--primary-950); font-size: 16px; font-weight: 600; }
+        .error-modal {
+            position: fixed;
+            inset: 0;
+            z-index: 80;
+            display: none;
+            place-items: center;
+            padding: 20px;
+            background: rgba(16, 37, 31, .62);
+            backdrop-filter: blur(6px);
+        }
+        .error-modal.open { display: grid; }
+        .error-modal-card {
+            width: min(520px, 100%);
+            max-height: calc(100vh - 40px);
+            overflow-y: auto;
+            border: 1px solid #ffd0c7;
+            border-radius: 12px;
+            background: white;
+            box-shadow: 0 24px 70px rgba(16,37,31,.28);
+        }
+        .error-modal-head {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 18px 20px;
+            border-bottom: 1px solid #ffe0d8;
+            background: #fff5f2;
+        }
+        .error-modal-head h3 { margin: 0; color: #8a2418; font-size: 20px; }
+        .error-modal-head p { margin: 4px 0 0; color: #7a5149; font-size: 14px; }
+        .error-modal-close {
+            flex: none;
+            width: 38px;
+            height: 38px;
+            border: 0;
+            border-radius: 8px;
+            display: inline-grid;
+            place-items: center;
+            background: #ffe6df;
+            color: #8a2418;
+            cursor: pointer;
+        }
+        .error-list {
+            display: grid;
+            gap: 9px;
+            margin: 0;
+            padding: 18px 20px 4px 38px;
+            color: #4a2b25;
+            font-weight: 600;
+        }
+        .error-modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            padding: 16px 20px 20px;
+        }
+        .field-invalid, .phone-field.field-invalid {
+            border-color: #b42318;
+            box-shadow: 0 0 0 3px rgba(180,35,24,.12);
+        }
 
         @media (max-width: 900px) {
             .page { grid-template-columns: 1fr; }
@@ -228,7 +317,7 @@
                 <h2 style="margin:0">Formulaire d'inscription</h2>
                 <p>Les champs marqués comme obligatoires permettent de créer votre compte et votre boutique.</p>
             </div>
-            <form method="POST" action="/inscription">
+            <form method="POST" action="/inscription" id="registration-form" novalidate>
                 <input type="hidden" name="_token" value="__CSRF_TOKEN__">
                 <fieldset>
                     <legend><i class="fa-solid fa-id-card"></i> Informations personnelles</legend>
@@ -255,10 +344,18 @@
                             <input name="login" type="email" placeholder="vous@exemple.com" autocomplete="username">
                         </label>
                         <label><span class="label-text">Mot de passe <span class="required">*</span></span>
-                            <input name="password" type="password" placeholder="Créer un mot de passe" required>
+                            <span class="password-field">
+                                <input name="password" type="password" placeholder="Créer un mot de passe" required>
+                                <button class="password-toggle" type="button" data-password-toggle="password" aria-label="Afficher le mot de passe" title="Afficher le mot de passe"><i class="fa-solid fa-eye"></i></button>
+                            </span>
+                            <small class="field-help">Au moins 8 caractères.</small>
                         </label>
                         <label><span class="label-text">Confirmer le mot de passe <span class="required">*</span></span>
-                            <input name="password_confirmation" type="password" placeholder="Répéter le mot de passe" required>
+                            <span class="password-field">
+                                <input name="password_confirmation" type="password" placeholder="Répéter le mot de passe" required>
+                                <button class="password-toggle" type="button" data-password-toggle="password_confirmation" aria-label="Afficher la confirmation du mot de passe" title="Afficher la confirmation du mot de passe"><i class="fa-solid fa-eye"></i></button>
+                            </span>
+                            <small class="field-help">Répétez le même mot de passe.</small>
                         </label>
                     </div>
                 </fieldset>
@@ -305,10 +402,187 @@
             </form>
         </section>
     </main>
+    <div class="error-modal" id="registration-error-modal" aria-hidden="true">
+        <section class="error-modal-card" role="dialog" aria-modal="true" aria-labelledby="registration-error-title">
+            <div class="error-modal-head">
+                <div>
+                    <h3 id="registration-error-title"><i class="fa-solid fa-triangle-exclamation"></i> Corrigez ces erreurs</h3>
+                    <p>Le compte ne peut pas être créé tant que ces informations ne sont pas corrigées.</p>
+                </div>
+                <button class="error-modal-close" type="button" id="registration-error-close" aria-label="Fermer"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <ul class="error-list" id="registration-error-list"></ul>
+            <div class="error-modal-actions">
+                <button class="btn btn-primary" type="button" id="registration-error-ok"><i class="fa-solid fa-check"></i>J'ai compris</button>
+            </div>
+        </section>
+    </div>
     <script>
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('/sw.js');
+            navigator.serviceWorker.register('/sw.js?v=10');
         }
+
+        const registrationForm = document.getElementById('registration-form');
+        const errorModal = document.getElementById('registration-error-modal');
+        const errorList = document.getElementById('registration-error-list');
+        const errorClose = document.getElementById('registration-error-close');
+        const errorOk = document.getElementById('registration-error-ok');
+        const fieldLabels = {
+            civility: 'Civilité',
+            first_name: 'Prénom',
+            last_name: 'Nom',
+            phone: 'Téléphone personnel',
+            whatsapp_phone: 'WhatsApp personnel',
+            login: 'Email',
+            password: 'Mot de passe',
+            password_confirmation: 'Confirmation du mot de passe',
+            business_name: 'Nom de la boutique',
+            business_phone: 'Téléphone boutique',
+            business_whatsapp_phone: 'WhatsApp boutique',
+            business_address: 'Adresse',
+            business_ifu: 'IFU',
+            business_slogan: 'Slogan',
+            business_description: 'Description de la boutique',
+            notes: 'Informations complémentaires',
+        };
+
+        function fieldLabel(field) {
+            return fieldLabels[field] || field;
+        }
+
+        function clearInvalidFields() {
+            registrationForm?.querySelectorAll('.field-invalid').forEach((item) => {
+                item.classList.remove('field-invalid');
+            });
+        }
+
+        function markInvalidField(name) {
+            const input = registrationForm?.querySelector(`[name="${CSS.escape(name)}"]`);
+            if (!input) return;
+            const wrapper = input.closest('.phone-field');
+            (wrapper || input).classList.add('field-invalid');
+        }
+
+        function showRegistrationErrors(errors) {
+            errorList.innerHTML = '';
+            errors.forEach((message) => {
+                const item = document.createElement('li');
+                item.textContent = message;
+                errorList.appendChild(item);
+            });
+            errorModal.classList.add('open');
+            errorModal.setAttribute('aria-hidden', 'false');
+            errorOk.focus();
+        }
+
+        function closeRegistrationErrors() {
+            errorModal.classList.remove('open');
+            errorModal.setAttribute('aria-hidden', 'true');
+        }
+
+        function collectClientErrors() {
+            const errors = [];
+            clearInvalidFields();
+
+            registrationForm.querySelectorAll('input, select, textarea').forEach((field) => {
+                if (!field.willValidate || field.checkValidity()) return;
+
+                markInvalidField(field.name);
+                const label = fieldLabel(field.name);
+
+                if (field.validity.valueMissing) {
+                    errors.push(`${label} est obligatoire.`);
+                } else if (field.validity.typeMismatch) {
+                    errors.push(`${label} doit être valide.`);
+                } else if (field.validity.patternMismatch) {
+                    errors.push(`${label} doit contenir 8 chiffres après le préfixe 01.`);
+                } else {
+                    errors.push(`${label} est invalide.`);
+                }
+            });
+
+            const password = registrationForm.elements.password?.value || '';
+            const confirmation = registrationForm.elements.password_confirmation?.value || '';
+            if (password && password.length < 8) {
+                markInvalidField('password');
+                errors.push('Le mot de passe doit contenir au moins 8 caractères.');
+            }
+            if (password && confirmation && password !== confirmation) {
+                markInvalidField('password_confirmation');
+                errors.push('La confirmation du mot de passe ne correspond pas.');
+            }
+
+            return [...new Set(errors)];
+        }
+
+        registrationForm?.addEventListener('submit', async (event) => {
+            event.preventDefault();
+
+            const clientErrors = collectClientErrors();
+            if (clientErrors.length) {
+                showRegistrationErrors(clientErrors);
+                return;
+            }
+
+            const submitButton = registrationForm.querySelector('[type="submit"]');
+            submitButton.disabled = true;
+
+            try {
+                const response = await fetch(registrationForm.action, {
+                    method: 'POST',
+                    body: new FormData(registrationForm),
+                    headers: { 'Accept': 'application/json' },
+                });
+
+                if (response.redirected) {
+                    window.location.href = response.url;
+                    return;
+                }
+
+                if (!response.ok) {
+                    const data = await response.json().catch(() => ({}));
+                    const serverErrors = [];
+                    clearInvalidFields();
+
+                    Object.entries(data.errors || {}).forEach(([field, messages]) => {
+                        markInvalidField(field);
+                        [].concat(messages).forEach((message) => {
+                            serverErrors.push(message);
+                        });
+                    });
+
+                    showRegistrationErrors(serverErrors.length ? serverErrors : ['Certaines informations sont invalides.']);
+                    return;
+                }
+
+                window.location.href = response.url || '/';
+            } catch (error) {
+                showRegistrationErrors(['Une erreur réseau est survenue. Vérifiez votre connexion puis réessayez.']);
+            } finally {
+                submitButton.disabled = false;
+            }
+        });
+
+        errorClose?.addEventListener('click', closeRegistrationErrors);
+        errorOk?.addEventListener('click', closeRegistrationErrors);
+        errorModal?.addEventListener('click', (event) => {
+            if (event.target === errorModal) closeRegistrationErrors();
+        });
+        document.querySelectorAll('[data-password-toggle]').forEach((button) => {
+            button.addEventListener('click', () => {
+                const input = registrationForm?.elements[button.dataset.passwordToggle];
+                if (!input) return;
+
+                const shouldShow = input.type === 'password';
+                input.type = shouldShow ? 'text' : 'password';
+                button.setAttribute('aria-label', shouldShow ? 'Masquer le mot de passe' : 'Afficher le mot de passe');
+                button.setAttribute('title', shouldShow ? 'Masquer le mot de passe' : 'Afficher le mot de passe');
+                button.querySelector('i').className = shouldShow ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye';
+            });
+        });
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') closeRegistrationErrors();
+        });
     </script>
     <script src="/cookie-consent.js"></script>
 </body>

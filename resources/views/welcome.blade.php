@@ -32,9 +32,10 @@
         }
 
         * { box-sizing: border-box; }
-        html { scroll-behavior: smooth; }
+        html { scroll-behavior: smooth; margin: 0; padding: 0; }
         body {
             margin: 0;
+            padding: 0;
             color: var(--ink);
             background: var(--paper);
             font-family: 'Poppins', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -44,14 +45,16 @@
         button, input, textarea { font: inherit; }
         .container { width: min(1180px, calc(100% - 32px)); margin: 0 auto; }
         .topbar {
-            position: sticky;
-            top: 0;
+            position: fixed;
+            inset: 0 0 auto;
             z-index: 20;
+            margin: 0;
             border-bottom: 1px solid rgba(255,255,255,.12);
             background: rgba(16, 37, 31, .94);
             color: white;
             backdrop-filter: blur(14px);
         }
+        main { padding-top: 0; }
         .nav {
             min-height: 70px;
             display: flex;
@@ -105,6 +108,7 @@
             background-size: cover;
             background-position: center;
             color: white;
+            padding-top: 70px;
         }
         .hero-inner {
             min-height: calc(100vh - 70px);
@@ -179,7 +183,7 @@
         .bottom-nav a { padding: 10px 4px; text-align: center; font-size: 11px; color: var(--muted); }
         .bottom-nav i { display: block; margin-bottom: 4px; font-size: 15px; }
         .bottom-nav a:first-child { color: var(--primary-700); font-weight: 600; }
-        section { padding: 84px 0; }
+        section { padding: 84px 0; scroll-margin-top: 70px; }
         .section-head { max-width: 760px; margin-bottom: 30px; }
         .section-head h2 { margin: 0 0 10px; font-size: clamp(30px, 4vw, 52px); line-height: 1.05; }
         .title-icon { color: var(--primary-700); margin-right: 10px; font-size: .82em; }
@@ -602,6 +606,9 @@
                         <article class="install-card">
                             <i class="fa-solid fa-desktop"></i>
                             <h3>Version desktop</h3>
+                            <div class="install-platform-icons" aria-label="Windows">
+                                <i class="fa-brands fa-windows" title="Windows" aria-label="Windows"></i>
+                            </div>
                             <p>Sur Windows, ouvrez EasyMarket dans une fenêtre dédiée pour gérer la caisse, les factures et les rapports avec plus de confort.</p>
                             <button class="btn btn-dark" type="button" data-install-target="desktop"><i class="fa-brands fa-windows"></i>Utiliser sur Windows</button>
                         </article>
@@ -867,7 +874,7 @@
         }, { threshold: 0.12 });
         document.querySelectorAll('.reveal').forEach((item) => revealObserver.observe(item));
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('/sw.js');
+            navigator.serviceWorker.register('/sw.js?v=10');
         }
         const contactStatus = document.getElementById('contact-status');
         const contactResult = new URLSearchParams(window.location.search).get('contact');
@@ -903,20 +910,22 @@
         const installModalClose = document.getElementById('install-modal-close');
         const installModalCancel = document.getElementById('install-modal-cancel');
         const installModalConfirm = document.getElementById('install-modal-confirm');
+        const mobileAppDownloadUrl = 'https://easy-market.xo.je/app_mobile.apk';
+        const desktopAppDownloadUrl = 'https://easy-market.xo.je/app_desktop.exe';
         let deferredInstallPrompt = null;
         let selectedInstallTarget = 'mobile';
         const isIosDevice = /iphone|ipad|ipod/i.test(navigator.userAgent);
         const isSafariBrowser = /^((?!chrome|android|crios|fxios|edgios).)*safari/i.test(navigator.userAgent);
         const installCopy = {
             mobile: {
-                title: 'Confirmer l’ajout sur mobile',
-                subtitle: 'Android & iPhone',
-                message: 'L’icône de la version mobile EasyMarket sera ajoutée sur l’écran de votre téléphone pour vous permettre d’ouvrir la connexion plus rapidement.'
+                title: 'Confirmer le téléchargement mobile',
+                subtitle: 'Application EasyMarket',
+                message: 'Confirmez pour lancer le téléchargement de l’application EasyMarket.'
             },
             desktop: {
-                title: 'Confirmer l’ajout sur Windows',
+                title: 'Confirmer le téléchargement Windows',
                 subtitle: 'Windows',
-                message: 'L’icône EasyMarket sera ajoutée sur votre ordinateur Windows pour ouvrir votre espace plus rapidement, dans une fenêtre dédiée.'
+                message: 'Confirmez pour lancer le téléchargement de l’application EasyMarket pour Windows.'
             }
         };
 
@@ -934,19 +943,13 @@
             const copy = installCopy[type] || installCopy.mobile;
             selectedInstallTarget = type;
             installModalConfirm.style.display = '';
+            installModalConfirm.innerHTML = type === 'mobile'
+                ? '<i class="fa-solid fa-download"></i>Télécharger'
+                : '<i class="fa-solid fa-download"></i>Installer';
             installIosSteps.style.display = 'none';
-
-            if (type === 'mobile' && isIosDevice && isSafariBrowser) {
-                installModalTitle.textContent = 'Installer sur iPhone avec Safari';
-                installModalSubtitle.textContent = 'Procédure nécessaire sur iOS';
-                installModalMessage.textContent = 'Sur iPhone, Safari ne permet pas d’ajouter l’icône automatiquement par bouton. Voici la procédure pour ajouter EasyMarket sur votre écran d’accueil.';
-                installIosSteps.style.display = 'grid';
-                installModalConfirm.style.display = 'none';
-            } else {
-                installModalTitle.textContent = copy.title;
-                installModalSubtitle.textContent = copy.subtitle;
-                installModalMessage.textContent = copy.message;
-            }
+            installModalTitle.textContent = copy.title;
+            installModalSubtitle.textContent = copy.subtitle;
+            installModalMessage.textContent = copy.message;
 
             installModal.classList.add('open');
             installModal.setAttribute('aria-hidden', 'false');
@@ -959,6 +962,18 @@
         }
 
         async function confirmInstall() {
+            if (selectedInstallTarget === 'mobile') {
+                window.location.href = mobileAppDownloadUrl;
+                closeInstallConfirm();
+                return;
+            }
+
+            if (selectedInstallTarget === 'desktop') {
+                window.location.href = desktopAppDownloadUrl;
+                closeInstallConfirm();
+                return;
+            }
+
             if (deferredInstallPrompt) {
                 deferredInstallPrompt.prompt();
                 await deferredInstallPrompt.userChoice;

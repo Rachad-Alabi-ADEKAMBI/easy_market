@@ -15,13 +15,14 @@
         .sheet { width: min(900px, calc(100% - 24px)); min-height: calc(100vh - 48px); margin: 24px auto; background: white; border: 1px solid var(--line); border-radius: 10px; padding: 34px; box-shadow: 0 20px 55px rgba(25,59,50,.12); display: flex; flex-direction: column; }
         h1, h2, p { margin-top: 0; }
         .head { border-bottom: 2px solid var(--primary); padding-bottom: 18px; margin-bottom: 22px; display: flex; justify-content: space-between; gap: 20px; }
-        .doc-brand { display: flex; align-items: flex-start; gap: 14px; }
+        .doc-brand { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 14px; }
+        .doc-brand-content { min-width: 0; }
         .doc-brand img, .doc-logo { width: 62px; height: 62px; object-fit: contain; border: 1px solid var(--line); border-radius: 8px; padding: 5px; }
         .doc-logo { display: grid; place-items: center; background: linear-gradient(135deg, var(--primary), var(--accent)); color: white; font-size: 24px; }
-        .doc-brand h1 { margin-bottom: 6px; }
-        .doc-brand p { margin: 2px 0; }
-        .doc-detail { display: flex; align-items: center; gap: 12px; }
-        .doc-detail i { width: 18px; text-align: center; flex: 0 0 18px; }
+        .doc-brand h1 { margin: 2px 0 10px; font-size: 32px; line-height: 1.08; }
+        .doc-brand p { margin: 3px 0; }
+        .doc-detail { display: grid; grid-template-columns: 20px minmax(0, 1fr); align-items: center; gap: 10px; }
+        .doc-detail i { width: 20px; text-align: center; }
         .doc-detail i, .doc-meta i, .card i, .balance-box h2 i, .statement h2 i, .detail-box h2 i, section > h2 i, th i, .footer i, li i { color: var(--primary); }
         .doc-meta { text-align: right; color: var(--muted); font-weight: 700; }
         .muted { color: var(--muted); }
@@ -35,8 +36,8 @@
         .balance-box h2 { margin: 0; padding: 12px 14px; background: var(--primary); color: white; font-size: 18px; display:flex; align-items:center; gap:8px; }
         .balance-box h2 i { color: white; }
         table { width: 100%; border-collapse: collapse; }
-        th, td { padding: 11px 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
-        th { color: var(--primary); font-size: 13px; }
+        th, td { padding: 11px 12px; border: 1px solid var(--line); text-align: left; vertical-align: top; }
+        th { color: var(--primary); font-size: 13px; background:#f6faf8; }
         td:last-child, th:last-child { text-align: right; white-space: nowrap; }
         tfoot td { border-top: 2px solid var(--primary); border-bottom: 0; font-weight: 800; }
         .statement { margin: 0 0 24px; }
@@ -46,18 +47,22 @@
         .detail-box.full { grid-column: 1 / -1; }
         .detail-box h2, .statement h2 { display:flex; align-items:center; gap:8px; }
         .detail-box h2 { margin: 0; padding: 12px 14px; background: #f6faf8; color: var(--primary); font-size: 17px; border-bottom: 1px solid var(--line); }
-        .tax-detail-section { margin-top: 26px; break-inside: avoid; page-break-inside: avoid; }
+        .tax-detail-section { margin-top: 34px; padding-top: 8px; min-height: 92vh; break-inside: avoid; page-break-inside: avoid; }
+        .tax-summary-grid { display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:10px; margin:0 0 14px; }
+        .tax-summary-grid div { border:1px solid var(--line); border-radius:8px; padding:10px 12px; background:#f6faf8; }
+        .tax-summary-grid span { display:block; color:var(--muted); font-size:12px; font-weight:600; }
+        .tax-summary-grid strong { display:block; color:var(--primary); font-size:16px; margin-top:3px; }
         .tax-detail-section h2 { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
         .tax-detail-section table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
-        .tax-detail-section th, .tax-detail-section td { padding: 9px 8px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
-        .tax-detail-section th { color: var(--primary); font-size: 13px; }
+        .tax-detail-section th, .tax-detail-section td { padding: 9px 8px; border: 1px solid var(--line); text-align: left; vertical-align: top; }
+        .tax-detail-section th { color: var(--primary); font-size: 13px; background:#f6faf8; }
         .tax-detail-section td:last-child, .tax-detail-section th:last-child { text-align: right; }
         .disclaimer { display:flex; gap:10px; align-items:flex-start; border:1px solid #f4c7a1; border-radius:8px; background:#fff8ed; color:#7a4d00; padding:12px 14px; margin:0 0 22px; font-weight:600; }
         .disclaimer i { color:#b86412; margin-top:3px; }
         ul { line-height: 1.8; }
         .footer { margin-top: auto; padding-top: 14px; border-top: 1px solid var(--line); color: var(--muted); text-align: center; font-size: 12px; display: flex; align-items: center; justify-content: center; gap: 7px; }
-        @media print { body { background:white; } .toolbar { display:none; } .sheet { width:100%; min-height:100vh; margin:0; border:0; box-shadow:none; border-radius:0; } }
-        @media (max-width: 680px) { .grid, .head, .balance-grid, .detail-grid { grid-template-columns: 1fr; display: grid; } .detail-box.full { grid-column: auto; } .doc-meta { text-align: left; } .sheet { padding: 20px; } }
+        @media print { body { background:white; } .toolbar { display:none; } .sheet { width:100%; min-height:100vh; margin:0; border:0; box-shadow:none; border-radius:0; } .tax-detail-section { min-height:100vh; page-break-before: always; break-before: page; page-break-after: always; break-after: page; } }
+        @media (max-width: 680px) { .grid, .head, .balance-grid, .detail-grid, .tax-summary-grid { grid-template-columns: 1fr; display: grid; } .detail-box.full { grid-column: auto; } .doc-meta { text-align: left; } .sheet { padding: 20px; } }
     </style>
 </head>
 <body>

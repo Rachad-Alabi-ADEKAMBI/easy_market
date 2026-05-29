@@ -19,16 +19,22 @@
         body { margin: 0; background: var(--paper); color: var(--ink); font-family: 'Poppins', Arial, sans-serif; line-height: 1.45; }
         .toolbar { position: sticky; top: 0; background: var(--primary); color: white; padding: 12px 20px; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
         .btn { border: 0; border-radius: 8px; padding: 10px 14px; background: var(--accent); color: white; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
-        .sheet { width: min(920px, calc(100% - 24px)); min-height: calc(100vh - 48px); margin: 24px auto; background: white; border: 1px solid var(--line); border-radius: 10px; padding: 34px; box-shadow: 0 20px 55px rgba(25,59,50,.12); display: flex; flex-direction: column; }
+        .sheet { width: min(920px, calc(100% - 24px)); min-height: calc(100vh - 48px); margin: 24px auto; background: white; border: 1px solid var(--line); border-radius: 10px; padding: 34px; box-shadow: 0 20px 55px rgba(25,59,50,.12); display: flex; flex-direction: column; position: relative; overflow: hidden; }
+        .cancelled-watermark { pointer-events: none; user-select: none; position: absolute; inset: 0; display: grid; place-items: center; z-index: 0; color: rgba(180, 35, 24, .13); font-size: clamp(54px, 11vw, 118px); font-weight: 900; text-transform: uppercase; letter-spacing: 2px; transform: rotate(-28deg); text-align: center; }
+        .sheet > *:not(.cancelled-watermark) { position: relative; z-index: 1; }
         .header { display: grid; grid-template-columns: 1fr auto; gap: 24px; border-bottom: 2px solid var(--primary); padding-bottom: 20px; }
         .brand { display: flex; gap: 12px; align-items: center; }
+        .doc-brand { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 14px; }
+        .doc-brand-content { min-width: 0; }
+        .doc-brand h1 { margin: 2px 0 10px; font-size: 32px; line-height: 1.08; }
         .logo { width: 54px; height: 54px; border-radius: 10px; display: grid; place-items: center; background: linear-gradient(135deg, #3f8f7b, var(--accent)); color: var(--primary); font-weight: 500; }
         .logo i { font-size: 22px; }
         .brand-logo-img { width: 54px; height: 54px; border-radius: 10px; object-fit: cover; border: 1px solid var(--line); }
-        .brand-details { margin-top: 8px; display: grid; gap: 4px; }
+        .doc-brand .logo, .brand-logo-img { width: 62px; height: 62px; border-radius: 8px; }
+        .brand-details { margin-top: 0; display: grid; gap: 3px; }
         .brand-details p { margin: 0; }
-        .doc-detail { display: flex; align-items: center; gap: 12px; }
-        .doc-detail i { width: 18px; text-align: center; flex: 0 0 18px; }
+        .doc-detail { display: grid; grid-template-columns: 20px minmax(0, 1fr); align-items: center; gap: 10px; margin: 3px 0; }
+        .doc-detail i { width: 20px; text-align: center; }
         h1, h2, p { margin-top: 0; }
         h2, .totals-row span, .meta-card strong { display: inline-flex; align-items: center; gap: 7px; }
         th .th-label { display: inline-flex; align-items: center; gap: 7px; }
@@ -52,6 +58,9 @@
         .totals { margin-top: 18px; display: grid; justify-content: end; }
         .totals-row { min-width: 290px; display: flex; justify-content: space-between; gap: 20px; padding: 8px 0; }
         .grand { border-top: 2px solid var(--primary); font-size: 20px; font-weight: 500; }
+        .cancellation-notice { margin-top: 22px; border: 1px solid #f4b4aa; background: #fff8f7; border-radius: 10px; padding: 14px 16px; color: #7f1d1d; }
+        .cancellation-notice strong { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+        .cancellation-notice p { margin: 0; color: #7f1d1d; }
         .footer { margin-top: auto; padding-top: 14px; border-top: 1px solid var(--line); display: grid; gap: 12px; justify-items: center; color: var(--muted); text-align: center; font-size: 12px; }
         .footer p { display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
         @media print {
@@ -72,7 +81,8 @@
         <button class="btn" onclick="window.print()"><i class="fa-solid fa-print"></i>Imprimer / PDF</button>
     </div>
 
-    <main class="sheet">
+    <main class="sheet __CANCELLED_CLASS__">
+        __CANCELLED_WATERMARK__
         <section class="header">
             <div>
                 __BUSINESS_HEADER__
@@ -104,6 +114,8 @@
             <div class="totals-row"><span><i class="fa-solid fa-calculator"></i>Sous-total</span><strong>__SUBTOTAL__</strong></div>
             <div class="totals-row grand"><span><i class="fa-solid fa-coins"></i>Total</span><strong>__TOTAL__</strong></div>
         </section>
+
+        __CANCELLATION_NOTICE__
 
         <section class="footer">
             <p><i class="fa-solid fa-circle-check"></i> Document généré par l'application EasyMarket.</p>
